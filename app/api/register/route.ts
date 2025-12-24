@@ -15,6 +15,7 @@ export async function POST(req: Request) {
         }
 
         await dbConnect();
+        console.log("Database connected");
 
         const existingUser = await User.findOne({ email });
         if (existingUser) {
