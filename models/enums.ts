@@ -1,0 +1,1 @@
+export const positions = ['Portiere', 'Difensore', 'Centrocampista', 'Attaccante'];
