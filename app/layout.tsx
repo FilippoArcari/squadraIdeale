@@ -17,6 +17,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <title>Squadra Ideale - Crea la tua formazione perfetta</title>
+        <meta name="description" content="Squadra Ideale è il tool definitivo per gestire e creare la tua formazione calcistica." />
+        <meta name="keywords" content="squadra ideale, calcio, formazione, fantasy football" />
+      </head>
       <body className={inter.className}>
         <Provider>{children}</Provider>
       </body>
