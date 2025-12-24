@@ -8,8 +8,10 @@ const inter = Inter({ subsets: ["latin"] });
 export const metadata: Metadata = {
   title: "Squadra Ideale",
   description: "Manage your sports tournaments",
+  verification: {
+    google: 'google0d4c40275ccf6ef2', // Inserisci solo il codice qui
+  },
 };
-
 export default function RootLayout({
   children,
 }: Readonly<{
