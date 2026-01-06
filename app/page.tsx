@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
+import StructuredData from "@/components/StructuredData";
+
 
 export default function Home() {
   const { data: session, status } = useSession();
@@ -31,6 +33,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/10 via-base-100 to-secondary/10">
+      <StructuredData />
       {/* Navbar */}
       <div className="navbar bg-base-100/80 backdrop-blur-md shadow-lg sticky top-0 z-50">
         <div className="flex-1">

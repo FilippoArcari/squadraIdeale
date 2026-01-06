@@ -1,0 +1,10 @@
+# Allow all search engines to crawl the site
+User-agent: *
+Allow: /
+
+# Disallow admin and API routes from being indexed
+Disallow: /api/
+Disallow: /admin/
+
+# Sitemap location
+Sitemap: https://squadra-ideale.vercel.app/sitemap.xml
