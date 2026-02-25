@@ -43,6 +43,7 @@ export default function AdminDashboard() {
     // Edit States
     const [editingPlayer, setEditingPlayer] = useState<string | null>(null);
     const [newRating, setNewRating] = useState<number>(50);
+    const [newPosition, setNewPosition] = useState<string>("Attaccante");
 
     const [editingGame, setEditingGame] = useState<Game | null>(null);
     const [gameForm, setGameForm] = useState<{
@@ -79,11 +80,11 @@ export default function AdminDashboard() {
     };
 
     // Player Actions
-    const handleUpdateRating = async (playerId: string) => {
+    const handleUpdatePlayer = async (playerId: string) => {
         const res = await fetch(`/api/tournaments/${id}/players/${playerId}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ rating: newRating }),
+            body: JSON.stringify({ rating: newRating, position: newPosition }),
         });
         if (res.ok) {
             setEditingPlayer(null);
@@ -254,7 +255,22 @@ export default function AdminDashboard() {
                                                         <span className="font-bold">{player.name}</span>
                                                     </div>
                                                 </td>
-                                                <td>{player.position}</td>
+                                                <td>
+                                                    {editingPlayer === player._id ? (
+                                                        <select
+                                                            className="select select-bordered select-xs w-full max-w-xs"
+                                                            value={newPosition}
+                                                            onChange={(e) => setNewPosition(e.target.value)}
+                                                        >
+                                                            <option value="Portiere">Portiere</option>
+                                                            <option value="Difensore">Difensore</option>
+                                                            <option value="Centrocampista">Centrocampista</option>
+                                                            <option value="Attaccante">Attaccante</option>
+                                                        </select>
+                                                    ) : (
+                                                        player.position
+                                                    )}
+                                                </td>
                                                 <td>
                                                     {editingPlayer === player._id ? (
                                                         <div className="flex items-center gap-2">
@@ -267,7 +283,7 @@ export default function AdminDashboard() {
                                                                 className="input input-xs input-primary w-24"
                                                             />
                                                             <span className="text-xs font-bold w-6">{newRating}</span>
-                                                            <button onClick={() => handleUpdateRating(player._id)} className="btn btn-xs btn-success btn-square">✓</button>
+                                                            <button onClick={() => handleUpdatePlayer(player._id)} className="btn btn-xs btn-success btn-square">✓</button>
                                                             <button onClick={() => setEditingPlayer(null)} className="btn btn-xs btn-ghost btn-square">✕</button>
                                                         </div>
                                                     ) : (
@@ -277,6 +293,7 @@ export default function AdminDashboard() {
                                                                 onClick={() => {
                                                                     setEditingPlayer(player._id);
                                                                     setNewRating(player.rating);
+                                                                    setNewPosition(player.position || "Attaccante");
                                                                 }}
                                                                 className="btn btn-xs btn-ghost opacity-50 hover:opacity-100"
                                                             >
