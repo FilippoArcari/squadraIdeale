@@ -217,6 +217,14 @@ export default function TournamentDetails() {
         return b.stats.mvps - a.stats.mvps;
     });
 
+    const topScorers = [...tournament.participants]
+        .filter(p => p.stats?.goals > 0)
+        .sort((a, b) => b.stats.goals - a.stats.goals);
+
+    const topMVPs = [...tournament.participants]
+        .filter(p => p.stats?.mvps > 0)
+        .sort((a, b) => b.stats.mvps - a.stats.mvps);
+
     return (
         <div className="min-h-screen bg-base-200">
             <Navbar />
@@ -490,6 +498,101 @@ export default function TournamentDetails() {
                                     ))
                                 )
                                 }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Secondary Leaderboards */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-8">
+                    {/* Top Scorers */}
+                    <div className="card bg-base-100 shadow-xl">
+                        <div className="card-body">
+                            <h2 className="card-title mb-4">Classifica Cannonieri ⚽</h2>
+                            <div className="overflow-x-auto">
+                                <table className="table table-zebra w-full">
+                                    <thead>
+                                        <tr>
+                                            <th>#</th>
+                                            <th>Giocatore</th>
+                                            <th className="text-center">Gol</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {topScorers.length > 0 ? topScorers.map((player, index) => (
+                                            <tr key={player._id}>
+                                                <td className="font-bold text-primary">#{index + 1}</td>
+                                                <td>
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="avatar">
+                                                            <div className="w-8 h-8 rounded-full">
+                                                                {player.image ? (
+                                                                    <img src={player.image} alt={player.name} />
+                                                                ) : (
+                                                                    <div className="bg-neutral-focus text-neutral-content rounded-full w-8 h-8 flex items-center justify-center">
+                                                                        <span className="text-xs font-bold">{player.name.substring(0, 2).toUpperCase()}</span>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        <span className="font-medium">{player.name}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="text-center font-bold text-success">{player.stats.goals}</td>
+                                            </tr>
+                                        )) : (
+                                            <tr>
+                                                <td colSpan={3} className="text-center text-gray-500 italic">Nessun gol segnato ancora.</td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Top MVPs */}
+                    <div className="card bg-base-100 shadow-xl">
+                        <div className="card-body">
+                            <h2 className="card-title mb-4">Classifica MVP 🌟</h2>
+                            <div className="overflow-x-auto">
+                                <table className="table table-zebra w-full">
+                                    <thead>
+                                        <tr>
+                                            <th>#</th>
+                                            <th>Giocatore</th>
+                                            <th className="text-center">MVP</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {topMVPs.length > 0 ? topMVPs.map((player, index) => (
+                                            <tr key={player._id}>
+                                                <td className="font-bold text-primary">#{index + 1}</td>
+                                                <td>
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="avatar">
+                                                            <div className="w-8 h-8 rounded-full">
+                                                                {player.image ? (
+                                                                    <img src={player.image} alt={player.name} />
+                                                                ) : (
+                                                                    <div className="bg-neutral-focus text-neutral-content rounded-full w-8 h-8 flex items-center justify-center">
+                                                                        <span className="text-xs font-bold">{player.name.substring(0, 2).toUpperCase()}</span>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        <span className="font-medium">{player.name}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="text-center font-bold text-warning">{player.stats.mvps}</td>
+                                            </tr>
+                                        )) : (
+                                            <tr>
+                                                <td colSpan={3} className="text-center text-gray-500 italic">Nessun MVP assegnato ancora.</td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     </div>

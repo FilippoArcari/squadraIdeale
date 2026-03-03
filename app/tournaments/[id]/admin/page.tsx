@@ -44,6 +44,8 @@ export default function AdminDashboard() {
     const [editingPlayer, setEditingPlayer] = useState<string | null>(null);
     const [newRating, setNewRating] = useState<number>(50);
     const [newPosition, setNewPosition] = useState<string>("Attaccante");
+    const [newImage, setNewImage] = useState<string | null>(null);
+    const [isUploading, setIsUploading] = useState(false);
 
     const [editingGame, setEditingGame] = useState<Game | null>(null);
     const [gameForm, setGameForm] = useState<{
@@ -81,14 +83,29 @@ export default function AdminDashboard() {
 
     // Player Actions
     const handleUpdatePlayer = async (playerId: string) => {
+        setIsUploading(true);
         const res = await fetch(`/api/tournaments/${id}/players/${playerId}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ rating: newRating, position: newPosition }),
+            body: JSON.stringify({ rating: newRating, position: newPosition, image: newImage }),
         });
+
+        setIsUploading(false);
         if (res.ok) {
             setEditingPlayer(null);
+            setNewImage(null);
             fetchTournament();
+        }
+    };
+
+    const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setNewImage(reader.result as string);
+            };
+            reader.readAsDataURL(file);
         }
     };
 
@@ -241,9 +258,11 @@ export default function AdminDashboard() {
                                             <tr key={player._id}>
                                                 <td>
                                                     <div className="flex items-center gap-3">
-                                                        <div className="avatar">
+                                                        <div className="avatar relative">
                                                             <div className="w-10 h-10 rounded-full">
-                                                                {player.image ? (
+                                                                {editingPlayer === player._id && newImage ? (
+                                                                    <img src={newImage} alt={player.name} />
+                                                                ) : player.image ? (
                                                                     <img src={player.image} alt={player.name} />
                                                                 ) : (
                                                                     <div className="bg-neutral-focus text-neutral-content rounded-full w-10 h-10 flex items-center justify-center">
@@ -251,6 +270,14 @@ export default function AdminDashboard() {
                                                                     </div>
                                                                 )}
                                                             </div>
+                                                            {editingPlayer === player._id && (
+                                                                <label className="absolute -bottom-2 -right-2 btn btn-xs btn-circle btn-primary cursor-pointer text-white">
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                                                        <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                                                                    </svg>
+                                                                    <input type="file" className="hidden" accept="image/*" onChange={handleImageChange} />
+                                                                </label>
+                                                            )}
                                                         </div>
                                                         <span className="font-bold">{player.name}</span>
                                                     </div>
@@ -283,8 +310,10 @@ export default function AdminDashboard() {
                                                                 className="input input-xs input-primary w-24"
                                                             />
                                                             <span className="text-xs font-bold w-6">{newRating}</span>
-                                                            <button onClick={() => handleUpdatePlayer(player._id)} className="btn btn-xs btn-success btn-square">✓</button>
-                                                            <button onClick={() => setEditingPlayer(null)} className="btn btn-xs btn-ghost btn-square">✕</button>
+                                                            <button onClick={() => handleUpdatePlayer(player._id)} className="btn btn-xs btn-success btn-square" disabled={isUploading}>
+                                                                {isUploading ? <span className="loading loading-spinner loading-xs"></span> : '✓'}
+                                                            </button>
+                                                            <button onClick={() => { setEditingPlayer(null); setNewImage(null); }} className="btn btn-xs btn-ghost btn-square" disabled={isUploading}>✕</button>
                                                         </div>
                                                     ) : (
                                                         <div className="flex items-center gap-2">
@@ -294,6 +323,7 @@ export default function AdminDashboard() {
                                                                     setEditingPlayer(player._id);
                                                                     setNewRating(player.rating);
                                                                     setNewPosition(player.position || "Attaccante");
+                                                                    setNewImage(player.image || null);
                                                                 }}
                                                                 className="btn btn-xs btn-ghost opacity-50 hover:opacity-100"
                                                             >

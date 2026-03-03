@@ -13,73 +13,128 @@ interface BalanceTeamsResult<T extends PlayerWithRating> {
 /**
  * Balances players into two teams based on their positions and ratings.
  * Ensures fair distribution by:
- * 1. Distributing goalkeepers first (max 1 per team)
- * 2. Using a greedy algorithm to distribute remaining players by rating
- * 3. Adding randomness to prevent identical team formations
+ * 1. Coupling players by role, assigning the better player to the weaker team in that role.
+ * 2. Distributing the remaining players one by one prioritizing strict numerical equality to ensure team size differs by at most 1.
  * 
  * @param players Array of players to balance
  * @returns Object containing teamA and teamB arrays
  */
 export function balanceTeams<T extends PlayerWithRating>(players: T[]): BalanceTeamsResult<T> {
-    // Group players by position
-    const playersByPosition: Record<string, T[]> = {};
+    const tA: T[] = [];
+    const tB: T[] = [];
 
+    // Track stats
+    const roleRatingA: Record<string, number> = {};
+    const roleRatingB: Record<string, number> = {};
+    let totalRatingA = 0;
+    let totalRatingB = 0;
+
+    // Initialize role ratings
+    positions.forEach(pos => {
+        roleRatingA[pos] = 0;
+        roleRatingB[pos] = 0;
+    });
+
+    // Helper to add a player to a team
+    const addToTeam = (team: 'A' | 'B', player: T) => {
+        if (team === 'A') {
+            tA.push(player);
+            if (roleRatingA[player.position] !== undefined) {
+                roleRatingA[player.position] += player.rating;
+            }
+            totalRatingA += player.rating;
+        } else {
+            tB.push(player);
+            if (roleRatingB[player.position] !== undefined) {
+                roleRatingB[player.position] += player.rating;
+            }
+            totalRatingB += player.rating;
+        }
+    };
+
+    // Group and sort by position with randomness
+    const playersByPosition: Record<string, T[]> = {};
     positions.forEach(pos => {
         playersByPosition[pos] = players.filter(p => p.position === pos);
-        // Sort each position by rating (descending) with slight shuffle for randomness
         playersByPosition[pos].sort((a, b) => {
-            // Add some randomness to the sorting (±5 rating points variance)
             const randomFactorA = (Math.random() - 0.5) * 10;
             const randomFactorB = (Math.random() - 0.5) * 10;
             return (b.rating + randomFactorB) - (a.rating + randomFactorA);
         });
     });
 
-    const tA: T[] = [];
-    const tB: T[] = [];
-    let ratingA = 0;
-    let ratingB = 0;
+    const unpairedPlayers: T[] = [];
 
-    // Extract goalkeepers and outfield players
-    const goalkeepers = playersByPosition['Portiere'] || [];
-    const outfieldPlayers = [
-        ...(playersByPosition['Difensore'] || []),
-        ...(playersByPosition['Centrocampista'] || []),
-        ...(playersByPosition['Attaccante'] || []),
-        ...(playersByPosition['Jolly'] || [])
-    ];
+    positions.forEach(pos => {
+        const rolePlayers = playersByPosition[pos] || [];
 
-    // Distribute Goalkeepers first (Max 1 per team if possible)
-    goalkeepers.forEach((gk) => {
-        const hasGKA = tA.some(p => p.position === 'Portiere');
-        const hasGKB = tB.some(p => p.position === 'Portiere');
+        for (let i = 0; i < rolePlayers.length; i += 2) {
+            if (i + 1 < rolePlayers.length) {
+                // We have a pair
+                const p1 = rolePlayers[i];
+                const p2 = rolePlayers[i + 1];
 
-        if (!hasGKA) {
-            tA.push(gk);
-            ratingA += gk.rating;
-        } else if (!hasGKB) {
-            tB.push(gk);
-            ratingB += gk.rating;
-        } else {
-            // Both have GK, balance by rating
-            if (ratingA <= ratingB) {
-                tA.push(gk);
-                ratingA += gk.rating;
+                // Decide which gets p1 (the better one)
+                if (roleRatingA[pos] < roleRatingB[pos]) {
+                    addToTeam('A', p1);
+                    addToTeam('B', p2);
+                } else if (roleRatingB[pos] < roleRatingA[pos]) {
+                    addToTeam('B', p1);
+                    addToTeam('A', p2);
+                } else {
+                    // Role ratings equal, use total rating
+                    if (totalRatingA <= totalRatingB) {
+                        addToTeam('A', p1);
+                        addToTeam('B', p2);
+                    } else {
+                        addToTeam('B', p1);
+                        addToTeam('A', p2);
+                    }
+                }
             } else {
-                tB.push(gk);
-                ratingB += gk.rating;
+                // Odd one out
+                unpairedPlayers.push(rolePlayers[i]);
             }
         }
     });
 
-    // Distribute remaining players using greedy algorithm
-    outfieldPlayers.forEach((player) => {
-        if (ratingA <= ratingB) {
-            tA.push(player);
-            ratingA += player.rating;
+    // Sort unpaired players by rating descending (with some randomness)
+    unpairedPlayers.sort((a, b) => {
+        const randomFactorA = (Math.random() - 0.5) * 10;
+        const randomFactorB = (Math.random() - 0.5) * 10;
+        return (b.rating + randomFactorB) - (a.rating + randomFactorA);
+    });
+
+    // Distribute unpaired players
+    unpairedPlayers.forEach(p => {
+        const pos = p.position;
+
+        if (tA.length < tB.length) {
+            addToTeam('A', p);
+        } else if (tB.length < tA.length) {
+            addToTeam('B', p);
         } else {
-            tB.push(player);
-            ratingB += player.rating;
+            // Same number of players, decide based on role
+            if (roleRatingA[pos] !== undefined && roleRatingB[pos] !== undefined) {
+                if (roleRatingA[pos] < roleRatingB[pos]) {
+                    addToTeam('A', p);
+                } else if (roleRatingB[pos] < roleRatingA[pos]) {
+                    addToTeam('B', p);
+                } else {
+                    // Fallback to total rating
+                    if (totalRatingA <= totalRatingB) {
+                        addToTeam('A', p);
+                    } else {
+                        addToTeam('B', p);
+                    }
+                }
+            } else {
+                if (totalRatingA <= totalRatingB) {
+                    addToTeam('A', p);
+                } else {
+                    addToTeam('B', p);
+                }
+            }
         }
     });
 

@@ -4,6 +4,14 @@ import Turnament from "@/models/Turnament";
 import Player from "@/models/Player";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { v2 as cloudinary } from "cloudinary";
+
+// Configure Cloudinary
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
 export async function DELETE(
     req: Request,
@@ -54,7 +62,7 @@ export async function PATCH(
             return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
         }
 
-        const { rating, position } = await req.json();
+        const { rating, position, image } = await req.json();
 
         await dbConnect();
         const { id, playerId } = await params;
@@ -74,6 +82,21 @@ export async function PATCH(
         const updateData: any = {};
         if (rating !== undefined) updateData.rating = rating;
         if (position !== undefined) updateData.position = position;
+
+        if (image) {
+            if (image.startsWith("data:image/")) {
+                const uploadResponse = await cloudinary.uploader.upload(image, {
+                    folder: "squadra_ideale/player_images",
+                    transformation: [
+                        { width: 400, height: 400, crop: "fill", gravity: "face" },
+                        { quality: "auto" },
+                    ],
+                });
+                updateData.image = uploadResponse.secure_url;
+            } else {
+                updateData.image = image;
+            }
+        }
 
         const updatedPlayer = await Player.findByIdAndUpdate(
             playerId,
