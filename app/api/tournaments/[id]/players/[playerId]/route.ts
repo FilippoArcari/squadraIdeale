@@ -62,7 +62,7 @@ export async function PATCH(
             return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
         }
 
-        const { rating, position, image } = await req.json();
+        const { name, rating, position, image } = await req.json();
 
         await dbConnect();
         const { id, playerId } = await params;
@@ -80,6 +80,7 @@ export async function PATCH(
 
         // Update player
         const updateData: any = {};
+        if (name !== undefined) updateData.name = name;
         if (rating !== undefined) updateData.rating = rating;
         if (position !== undefined) updateData.position = position;
 

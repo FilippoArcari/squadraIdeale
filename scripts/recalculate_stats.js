@@ -52,10 +52,15 @@ async function run() {
         console.log(`📊 Trovate ${games.length} partite finalizzate da elaborare...`);
 
         // 3. Ricalcolare per ogni partita
+        const goalHistory = {};
         for (const game of games) {
             // Gol
             for (const goal of game.goals) {
-                await Player.findByIdAndUpdate(goal.player, { $inc: { "stats.goals": goal.count } });
+                const playerId = goal.player.toString();
+                await Player.findByIdAndUpdate(playerId, { $inc: { "stats.goals": goal.count } });
+                
+                if (!goalHistory[playerId]) goalHistory[playerId] = [];
+                goalHistory[playerId].push({ date: game.date, count: goal.count });
             }
 
             // MVP
@@ -99,6 +104,23 @@ async function run() {
                 });
             }
         }
+        //Stampo le statistiche di tutti i giocatori e quando hanno segnato gol
+        const players = await Player.find();
+        players.forEach(player => {
+            console.log(`\n⚽ Giocatore: ${player.name}`);
+            console.log(`   Statistiche:`, player.stats);
+            
+            const playerGoals = goalHistory[player._id.toString()] || [];
+            if (playerGoals.length > 0) {
+                console.log(`   Cronologia Gol:`);
+                playerGoals.sort((a, b) => new Date(a.date) - new Date(b.date))
+                    .forEach(g => {
+                        console.log(`     - ${new Date(g.date).toLocaleDateString()}: ${g.count} gol`);
+                    });
+            } else {
+                console.log(`   Cronologia Gol: Nessun gol segnato.`);
+            }
+        });
 
         console.log("✅ Ricalcolo completato con successo!");
         process.exit(0);

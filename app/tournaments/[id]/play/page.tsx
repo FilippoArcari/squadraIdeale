@@ -6,7 +6,8 @@ import { useParams, useRouter } from "next/navigation";
 import { positions } from "../../../../models/enums";
 import { balanceTeams } from "@/lib/balanceTeams";
 import { PlayerToken } from "@/components/PlayerToken";
-import { useDragAndDrop } from "@/hooks/useDragAndDrop";
+import { TeamDropZone } from "@/components/TeamDropZone";
+import { DndContext, DragEndEvent, TouchSensor, MouseSensor, useSensor, useSensors } from '@dnd-kit/core';
 
 interface Player {
     _id?: string;
@@ -32,12 +33,33 @@ export default function PlayMatch() {
     const [gameNotification, setGameNotification] = useState<{ show: boolean; gameId: string | null }>({ show: false, gameId: null });
     const [gameStarted, setGameStarted] = useState(false);
 
-    const { isDragging, handleDragStart, handleDragEnd, handleDropOnTeam, handleDragOver } = useDragAndDrop(
-        teamA,
-        teamB,
-        setTeamA,
-        setTeamB
+    const sensors = useSensors(
+        useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
+        useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } })
     );
+
+    const handleDragEnd = (event: DragEndEvent) => {
+        const { active, over } = event;
+        if (!over) return;
+
+        const playerId = active.id as string;
+        const targetTeam = over.id as 'A' | 'B';
+
+        const sourceIsTeamA = teamA.some(p => (p._id || p.id) === playerId);
+        const sourceIsTeamB = teamB.some(p => (p._id || p.id) === playerId);
+
+        const playerToMove = teamA.find(p => (p._id || p.id) === playerId) || teamB.find(p => (p._id || p.id) === playerId);
+
+        if (!playerToMove) return;
+
+        if (targetTeam === 'A' && sourceIsTeamB) {
+            setTeamB(teamB.filter(p => (p._id || p.id) !== playerId));
+            setTeamA([...teamA, playerToMove]);
+        } else if (targetTeam === 'B' && sourceIsTeamA) {
+            setTeamA(teamA.filter(p => (p._id || p.id) !== playerId));
+            setTeamB([...teamB, playerToMove]);
+        }
+    };
 
     useEffect(() => {
         if (id) {
@@ -245,126 +267,75 @@ export default function PlayMatch() {
                             <div className="w-full max-w-md md:max-w-xl lg:max-w-2xl mx-auto">
                                 <div className="relative w-full  bg-cover bg-center rounded-xl overflow-hidden shadow-2xl border-4 border-white/20"
                                     style={{ backgroundImage: "url('/calcio_vert.jpeg')" }}>
+                                    
+                                    <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
 
                                     {/* Overlay for better text visibility */}
                                     <div className="absolute inset-0 bg-black/10"></div>
 
                                     {/* Team A - Top Half */}
-                                    <div
-                                        className={`w-full h-1/2 py-6 px-2 flex flex-col justify-start gap-1 md:gap-4 relative transition-all ${isDragging ? 'ring-4 ring-info ring-inset bg-info/5' : ''}`}
-                                        onDragOver={handleDragOver}
-                                        onDrop={() => handleDropOnTeam('A')}
-                                    >
+                                    <TeamDropZone id="A" className="w-full h-1/2 py-6 px-2 flex flex-col justify-start gap-1 md:gap-4 relative">
                                         <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-info/80 text-white px-3 py-1 rounded-full text-xs font-bold shadow-lg backdrop-blur-sm z-10">
                                             Squadra A (Avg: {(teamA.reduce((a, b) => a + b.rating, 0) / teamA.length).toFixed(1)})
                                         </div>
 
                                         {/* Formation Rows for Team A (Top to Bottom: GK -> DEF -> MID -> ATT) */}
-                                        <div className="flex justify-center"> {/* GK Zone */}
+                                        <div className="flex justify-center z-10 relative">
                                             {teamA.filter(p => p.position === 'Portiere').map(p => (
-                                                <PlayerToken
-                                                    key={p._id}
-                                                    player={p}
-                                                    color="info"
-                                                    onDragStart={handleDragStart}
-                                                    onDragEnd={handleDragEnd}
-                                                />
+                                                <PlayerToken key={p._id || p.id} player={p} color="info" />
                                             ))}
                                         </div>
-                                        <div className="flex justify-evenly"> {/* DEF Zone */}
+                                        <div className="flex justify-evenly z-10 relative">
                                             {teamA.filter(p => p.position === 'Difensore').map(p => (
-                                                <PlayerToken
-                                                    key={p._id}
-                                                    player={p}
-                                                    color="info"
-                                                    onDragStart={handleDragStart}
-                                                    onDragEnd={handleDragEnd}
-                                                />
+                                                <PlayerToken key={p._id || p.id} player={p} color="info" />
                                             ))}
                                         </div>
-                                        <div className="flex justify-evenly"> {/* MID Zone */}
+                                        <div className="flex justify-evenly z-10 relative">
                                             {teamA.filter(p => p.position === 'Centrocampista' || p.position === 'Jolly').map(p => (
-                                                <PlayerToken
-                                                    key={p._id}
-                                                    player={p}
-                                                    color="info"
-                                                    onDragStart={handleDragStart}
-                                                    onDragEnd={handleDragEnd}
-                                                />
+                                                <PlayerToken key={p._id || p.id} player={p} color="info" />
                                             ))}
                                         </div>
-                                        <div className="flex justify-evenly"> {/* ATT Zone */}
+                                        <div className="flex justify-evenly z-10 relative">
                                             {teamA.filter(p => p.position === 'Attaccante').map(p => (
-                                                <PlayerToken
-                                                    key={p._id}
-                                                    player={p}
-                                                    color="info"
-                                                    onDragStart={handleDragStart}
-                                                    onDragEnd={handleDragEnd}
-                                                />
+                                                <PlayerToken key={p._id || p.id} player={p} color="info" />
                                             ))}
                                         </div>
-                                    </div>
+                                    </TeamDropZone>
 
                                     {/* MidLine */}
-                                    {isDragging && <div className="absolute top-1/2 left-0 w-full h-1 bg-white/50 z-20"></div>}
-                                    <div className="w-full h-1/2 py-6 px-2 flex flex-col-reverse justify-start gap-4"></div>
+                                    <div className="absolute top-1/2 left-0 w-full h-1 bg-white/50 z-20"></div>
+                                    <div className="w-full h-1/2 py-6 px-2 flex flex-col-reverse justify-start gap-4 pointer-events-none"></div>
+                                    
                                     {/* Team B - Bottom Half */}
-                                    <div
-                                        className={`w-full h-1/2 py-6 px-2 flex flex-col-reverse justify-start gap-4 relative transition-all ${isDragging ? 'ring-4 ring-error ring-inset bg-error/5' : ''}`}
-                                        onDragOver={handleDragOver}
-                                        onDrop={() => handleDropOnTeam('B')}
-                                    >
+                                    <TeamDropZone id="B" className="w-full absolute bottom-0 h-1/2 py-6 px-2 flex flex-col-reverse justify-start gap-4 relative">
                                         <div className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-error/80 text-white px-3 py-1 rounded-full text-xs font-bold shadow-lg backdrop-blur-sm z-10">
                                             Squadra B (Avg: {(teamB.reduce((a, b) => a + b.rating, 0) / teamB.length).toFixed(1)})
                                         </div>
 
                                         {/* Formation Rows for Team B (Bottom to Top: GK -> DEF -> MID -> ATT) */}
-                                        <div className="flex justify-center "> {/* GK Zone */}
+                                        <div className="flex justify-center z-10 relative">
                                             {teamB.filter(p => p.position === 'Portiere').map(p => (
-                                                <PlayerToken
-                                                    key={p._id}
-                                                    player={p}
-                                                    color="error"
-                                                    onDragStart={handleDragStart}
-                                                    onDragEnd={handleDragEnd}
-                                                />
+                                                <PlayerToken key={p._id || p.id} player={p} color="error" />
                                             ))}
                                         </div>
-                                        <div className="flex justify-evenly "> {/* DEF Zone */}
+                                        <div className="flex justify-evenly z-10 relative">
                                             {teamB.filter(p => p.position === 'Difensore').map(p => (
-                                                <PlayerToken
-                                                    key={p._id}
-                                                    player={p}
-                                                    color="error"
-                                                    onDragStart={handleDragStart}
-                                                    onDragEnd={handleDragEnd}
-                                                />
+                                                <PlayerToken key={p._id || p.id} player={p} color="error" />
                                             ))}
                                         </div>
-                                        <div className="flex justify-evenly "> {/* MID Zone */}
+                                        <div className="flex justify-evenly z-10 relative">
                                             {teamB.filter(p => p.position === 'Centrocampista' || p.position === 'Jolly').map(p => (
-                                                <PlayerToken
-                                                    key={p._id}
-                                                    player={p}
-                                                    color="error"
-                                                    onDragStart={handleDragStart}
-                                                    onDragEnd={handleDragEnd}
-                                                />
+                                                <PlayerToken key={p._id || p.id} player={p} color="error" />
                                             ))}
                                         </div>
-                                        <div className="flex justify-evenly px-12 pt-6"> {/* ATT Zone */}
+                                        <div className="flex justify-evenly z-10 relative">
                                             {teamB.filter(p => p.position === 'Attaccante').map(p => (
-                                                <PlayerToken
-                                                    key={p._id}
-                                                    player={p}
-                                                    color="error"
-                                                    onDragStart={handleDragStart}
-                                                    onDragEnd={handleDragEnd}
-                                                />
+                                                <PlayerToken key={p._id || p.id} player={p} color="error" />
                                             ))}
                                         </div>
-                                    </div>
+                                    </TeamDropZone>
+                                    
+                                    </DndContext>
                                 </div>
                             </div>
                         )}

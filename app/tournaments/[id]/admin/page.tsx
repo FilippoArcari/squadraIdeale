@@ -42,6 +42,7 @@ export default function AdminDashboard() {
 
     // Edit States
     const [editingPlayer, setEditingPlayer] = useState<string | null>(null);
+    const [newName, setNewName] = useState<string>("");
     const [newRating, setNewRating] = useState<number>(50);
     const [newPosition, setNewPosition] = useState<string>("Attaccante");
     const [newImage, setNewImage] = useState<string | null>(null);
@@ -87,7 +88,7 @@ export default function AdminDashboard() {
         const res = await fetch(`/api/tournaments/${id}/players/${playerId}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ rating: newRating, position: newPosition, image: newImage }),
+            body: JSON.stringify({ name: newName, rating: newRating, position: newPosition, image: newImage }),
         });
 
         setIsUploading(false);
@@ -279,7 +280,16 @@ export default function AdminDashboard() {
                                                                 </label>
                                                             )}
                                                         </div>
-                                                        <span className="font-bold">{player.name}</span>
+                                                        {editingPlayer === player._id ? (
+                                                            <input
+                                                                type="text"
+                                                                value={newName}
+                                                                onChange={(e) => setNewName(e.target.value)}
+                                                                className="input input-xs input-primary w-24 font-bold"
+                                                            />
+                                                        ) : (
+                                                            <span className="font-bold">{player.name}</span>
+                                                        )}
                                                     </div>
                                                 </td>
                                                 <td>
@@ -321,6 +331,7 @@ export default function AdminDashboard() {
                                                             <button
                                                                 onClick={() => {
                                                                     setEditingPlayer(player._id);
+                                                                    setNewName(player.name);
                                                                     setNewRating(player.rating);
                                                                     setNewPosition(player.position || "Attaccante");
                                                                     setNewImage(player.image || null);
