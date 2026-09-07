@@ -41,13 +41,14 @@ export async function POST(
             );
         }
 
-        // Create the game
+        // Create the game, taggata con la stagione attualmente in corso per il torneo
         const game = await Game.create({
             players: body.players,
             turnament: id,
             date: new Date(body.date),
             teamA: body.teamA || [],
             teamB: body.teamB || [],
+            season: tournament.currentSeason || 1,
         });
 
         // Add game to tournament's games array

@@ -11,6 +11,18 @@ const GameSchema = new mongoose.Schema({
         ref: "Turnament",
         required: [true, "Turnament is required."],
     },
+    // Numero di stagione del torneo a cui appartiene questa partita (copiato da
+    // Turnament.currentSeason al momento della creazione). E' il campo che rende
+    // possibile calcolare classifiche "solo stagione corrente" oppure storiche,
+    // senza dover mai toccare Player.stats: le statistiche per stagione si ottengono
+    // sempre aggregando le Game con questo season, mai da un contatore mutato a mano
+    // (vedi lib/seasonStats.ts per il motivo di questa scelta).
+    season: {
+        type: Number,
+        required: [true, "Season is required."],
+        default: 1,
+        min: 1,
+    },
     scorer: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "Player",

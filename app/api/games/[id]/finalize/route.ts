@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import dbConnect from "@/lib/dbConnect";
 import Game from "@/models/Game";
 import Player from "@/models/Player";
+import Turnament from "@/models/Turnament";
+import { resolvePointsRule, pointsForOutcome, outcomeFor } from "@/lib/pointsRules";
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
     try {
@@ -81,13 +83,21 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         }
 
         const allPlayers = [...teamAIds, ...teamBIds];
+
+        // La regola punti va risolta in base alla STAGIONE di questa partita
+        // (game.season), non alla stagione corrente del torneo: una partita
+        // finalizzata in ritardo, appartenente a una stagione ormai chiusa, deve
+        // comunque contare con la regola che era in vigore quando e' stata
+        // giocata (vedi lib/pointsRules.ts).
+        const tournament = await Turnament.findById(game.turnament).select("pointsRuleHistory").lean();
+        const rule = resolvePointsRule((tournament as any)?.pointsRuleHistory, game.season || 1);
+
         for (const playerId of allPlayers) {
             const isWinner = winningTeam.includes(playerId);
             const isDraw = winningTeam.length === 0; // Empty array means draw
             const isLoser = !isWinner && !isDraw;
 
-            // Calculate points: +3 for win, +1 for draw, 0 for loss
-            const points = isWinner ? 3 : (isDraw ? 1 : 0);
+            const points = pointsForOutcome(rule, outcomeFor(isWinner, isDraw));
 
             await Player.findByIdAndUpdate(playerId, {
                 $inc: {

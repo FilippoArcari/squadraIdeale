@@ -16,6 +16,8 @@ const PlayerSchema = new mongoose.Schema({
 
 const GameSchema = new mongoose.Schema({
     date: Date,
+    turnament: mongoose.Schema.Types.ObjectId,
+    season: { type: Number, default: 1 },
     teamA: [mongoose.Schema.Types.ObjectId],
     teamB: [mongoose.Schema.Types.ObjectId],
     goals: [{ player: mongoose.Schema.Types.ObjectId, count: Number }],
@@ -23,6 +25,30 @@ const GameSchema = new mongoose.Schema({
     manualWinner: String,
     isFinalized: Boolean
 });
+
+const TurnamentSchema = new mongoose.Schema({
+    pointsRuleHistory: [{
+        fromSeason: Number,
+        winner: Number,
+        loser: Number,
+        draw: Number,
+        absent: Number,
+    }]
+});
+
+// Regola storica di fallback (identica a LEGACY_POINTS_RULE in lib/pointsRules.ts).
+// ATTENZIONE: questo script gira fuori da Next (node puro, no path alias), quindi
+// non puo' importare lib/pointsRules.ts: la risoluzione della regola e' duplicata
+// qui a mano. Se cambi la logica in lib/pointsRules.ts, aggiornala anche qui.
+const LEGACY_RULE = { fromSeason: 1, winner: 3, loser: 0, draw: 1, absent: 0 };
+
+function resolvePointsRule(ruleHistory, season) {
+    if (!ruleHistory || ruleHistory.length === 0) return LEGACY_RULE;
+    const applicable = ruleHistory
+        .filter(r => r.fromSeason <= season)
+        .sort((a, b) => b.fromSeason - a.fromSeason)[0];
+    return applicable || LEGACY_RULE;
+}
 
 async function run() {
     if (!process.env.MONGODB_URI) {
@@ -37,6 +63,7 @@ async function run() {
 
         const Player = mongoose.models.Player || mongoose.model("Player", PlayerSchema);
         const Game = mongoose.models.Game || mongoose.model("Game", GameSchema);
+        const Turnament = mongoose.models.Turnament || mongoose.model("Turnament", TurnamentSchema);
 
         // 1. Azzerare tutte le statistiche
         console.log("🔄 Azzerando le statistiche di tutti i giocatori...");
@@ -50,6 +77,12 @@ async function run() {
         // 2. Prelevare le partite finalizzate
         const games = await Game.find({ isFinalized: true });
         console.log(`📊 Trovate ${games.length} partite finalizzate da elaborare...`);
+
+        // Precarico le regole punti di tutti i tornei coinvolti, cosi' non serve
+        // una query per ogni singola partita.
+        const tournamentIds = [...new Set(games.map(g => g.turnament?.toString()).filter(Boolean))];
+        const tournaments = await Turnament.find({ _id: { $in: tournamentIds } }).select("pointsRuleHistory");
+        const ruleHistoryByTournament = new Map(tournaments.map(t => [t._id.toString(), t.pointsRuleHistory]));
 
         // 3. Ricalcolare per ogni partita
         const goalHistory = {};
@@ -88,10 +121,15 @@ async function run() {
                 winningTeam = scoreA > scoreB ? teamAIds : (scoreB > scoreA ? teamBIds : []);
             }
 
+            const rule = resolvePointsRule(
+                ruleHistoryByTournament.get(game.turnament?.toString()),
+                game.season || 1
+            );
+
             for (const playerId of allPlayers) {
                 const isWinner = winningTeam.includes(playerId);
                 const isDraw = winningTeam.length === 0;
-                const points = isWinner ? 3 : (isDraw ? 1 : 0);
+                const points = isWinner ? rule.winner : (isDraw ? rule.draw : rule.loser);
 
                 await Player.findByIdAndUpdate(playerId, {
                     $inc: {

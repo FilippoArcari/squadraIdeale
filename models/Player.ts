@@ -39,6 +39,20 @@ const PlayerSchema = new mongoose.Schema({
         losses: { type: Number, default: 0 },
         points: { type: Number, default: 0 },
     },
+    // Rettifiche manuali ai punti impostate dall'admin tramite il tab "Gestione
+    // Punti" (es. bonus, penalita' fair-play), scoped per singola stagione.
+    // Non sostituiscono il calcolo automatico (vittorie/pareggi -> punti,
+    // derivato dalle Game in lib/seasonStats.ts): si sommano ad esso, esattamente
+    // come una scrittura di rettifica in contabilita' si somma al saldo calcolato
+    // invece di sovrascriverlo. Questo evita di reintrodurre un contatore
+    // assoluto mutabile in competizione con la fonte di verita' (le Game).
+    pointAdjustments: {
+        type: [{
+            season: { type: Number, required: true },
+            delta: { type: Number, required: true },
+        }],
+        default: [],
+    },
 });
 
 export type Player = InferSchemaType<typeof PlayerSchema>;

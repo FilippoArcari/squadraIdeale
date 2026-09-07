@@ -40,6 +40,29 @@ interface Tournament {
     joinCode: string;
     owner: string;
     status: string;
+    currentSeason?: number;
+}
+
+interface SeasonStandingRow {
+    playerId: string;
+    name: string;
+    image?: string;
+    goals: number;
+    mvps: number;
+    gamesPlayed: number;
+    wins: number;
+    draws: number;
+    losses: number;
+    points: number;
+}
+
+interface SeasonSummary {
+    season: number;
+    gamesPlayed: number;
+    standings: SeasonStandingRow[];
+    topScorer: SeasonStandingRow | null;
+    topMvp: SeasonStandingRow | null;
+    isCurrent: boolean;
 }
 
 export default function TournamentDetails() {
@@ -58,6 +81,9 @@ export default function TournamentDetails() {
     const [isDeactivating, setIsDeactivating] = useState(false);
     const [isReactivating, setIsReactivating] = useState(false);
     const [isLeaving, setIsLeaving] = useState(false);
+    const [pastSeasons, setPastSeasons] = useState<SeasonSummary[]>([]);
+    const [isLoadingSeasons, setIsLoadingSeasons] = useState(false);
+    const [showSeasonHistory, setShowSeasonHistory] = useState(false);
 
     useEffect(() => {
         if (id) {
@@ -70,6 +96,30 @@ export default function TournamentDetails() {
         if (res.ok) {
             const data = await res.json();
             setTournament(data);
+        }
+    };
+
+    // Storico stagioni: visibile a chiunque partecipi al torneo (non solo
+    // all'owner), caricato solo quando l'utente apre la sezione, per non
+    // appesantire il caricamento iniziale della pagina con dati che riguardano
+    // solo stagioni passate.
+    const fetchSeasonHistory = async () => {
+        setIsLoadingSeasons(true);
+        const res = await fetch(`/api/tournaments/${id}/seasons`);
+        if (res.ok) {
+            const data = await res.json();
+            // Nella pagina pubblica mostriamo solo le stagioni concluse: quella
+            // corrente e' gia' visibile nelle classifiche principali sopra.
+            setPastSeasons((data.seasons as SeasonSummary[]).filter(s => !s.isCurrent));
+        }
+        setIsLoadingSeasons(false);
+    };
+
+    const toggleSeasonHistory = () => {
+        const next = !showSeasonHistory;
+        setShowSeasonHistory(next);
+        if (next && pastSeasons.length === 0) {
+            fetchSeasonHistory();
         }
     };
 
@@ -240,7 +290,10 @@ export default function TournamentDetails() {
 
                 <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-8 gap-4">
                     <div>
-                        <h1 className="text-3xl font-bold">{tournament.name}</h1>
+                        <div className="flex items-center gap-3">
+                            <h1 className="text-3xl font-bold">{tournament.name}</h1>
+                            <span className="badge badge-primary badge-lg">Stagione {tournament.currentSeason || 1}</span>
+                        </div>
                         <p className="text-gray-500">Partecipanti: {tournament.participants.length}</p>
                     </div>
 
@@ -595,6 +648,87 @@ export default function TournamentDetails() {
                                 </table>
                             </div>
                         </div>
+                    </div>
+                </div>
+
+                {/* Storico Stagioni - visibile a tutti i partecipanti, non solo all'owner */}
+                <div className="card bg-base-100 shadow-xl mt-8">
+                    <div className="card-body">
+                        <button
+                            onClick={toggleSeasonHistory}
+                            className="flex items-center justify-between w-full text-left"
+                        >
+                            <h2 className="card-title">Storico Stagioni</h2>
+                            <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                className={`h-5 w-5 transition-transform ${showSeasonHistory ? "rotate-180" : ""}`}
+                                viewBox="0 0 20 20"
+                                fill="currentColor"
+                            >
+                                <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                            </svg>
+                        </button>
+
+                        {showSeasonHistory && (
+                            <div className="mt-4 space-y-4">
+                                {isLoadingSeasons ? (
+                                    <span className="loading loading-spinner"></span>
+                                ) : pastSeasons.length === 0 ? (
+                                    <p className="text-gray-500 italic">
+                                        Nessuna stagione passata: la Stagione {tournament.currentSeason || 1} e' ancora in corso.
+                                    </p>
+                                ) : (
+                                    pastSeasons.map((s) => (
+                                        <div key={s.season} className="collapse collapse-arrow bg-base-200">
+                                            <input type="checkbox" />
+                                            <div className="collapse-title font-bold">
+                                                Stagione {s.season}
+                                                <span className="text-sm font-normal opacity-70 ml-2">
+                                                    ({s.gamesPlayed} partite)
+                                                </span>
+                                            </div>
+                                            <div className="collapse-content">
+                                                <div className="flex flex-wrap gap-6 mb-3 text-sm">
+                                                    <div>🥇 Capocannoniere: <strong>{s.topScorer ? `${s.topScorer.name} (${s.topScorer.goals})` : "N/A"}</strong></div>
+                                                    <div>🏅 MVP Stagione: <strong>{s.topMvp ? `${s.topMvp.name} (${s.topMvp.mvps})` : "N/A"}</strong></div>
+                                                    <div>🏆 Vincitore: <strong>{s.standings[0]?.name || "N/A"}</strong></div>
+                                                </div>
+                                                <div className="overflow-x-auto">
+                                                    <table className="table table-sm w-full">
+                                                        <thead>
+                                                            <tr>
+                                                                <th>#</th>
+                                                                <th>Giocatore</th>
+                                                                <th>Pt</th>
+                                                                <th>V</th>
+                                                                <th>P</th>
+                                                                <th>S</th>
+                                                                <th>Gol</th>
+                                                                <th>MVP</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {s.standings.map((row, idx) => (
+                                                                <tr key={row.playerId}>
+                                                                    <td>{idx + 1}</td>
+                                                                    <td>{row.name}</td>
+                                                                    <td className="font-bold">{row.points}</td>
+                                                                    <td>{row.wins}</td>
+                                                                    <td>{row.draws}</td>
+                                                                    <td>{row.losses}</td>
+                                                                    <td>{row.goals}</td>
+                                                                    <td>{row.mvps}</td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
 

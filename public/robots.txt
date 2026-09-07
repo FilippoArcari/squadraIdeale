@@ -8,3 +8,5 @@ Disallow: /admin/
 
 # Sitemap location
 Sitemap: https://squadra-ideale.vercel.app/sitemap.xml
+
+

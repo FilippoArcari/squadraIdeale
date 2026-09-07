@@ -30,6 +30,29 @@ interface Tournament {
     admins: Player[];
     participants: Player[];
     games: Game[];
+    currentSeason?: number;
+}
+
+interface SeasonStandingRow {
+    playerId: string;
+    name: string;
+    image?: string;
+    goals: number;
+    mvps: number;
+    gamesPlayed: number;
+    wins: number;
+    draws: number;
+    losses: number;
+    points: number;
+}
+
+interface SeasonSummary {
+    season: number;
+    gamesPlayed: number;
+    standings: SeasonStandingRow[];
+    topScorer: SeasonStandingRow | null;
+    topMvp: SeasonStandingRow | null;
+    isCurrent: boolean;
 }
 
 export default function AdminDashboard() {
@@ -37,8 +60,20 @@ export default function AdminDashboard() {
     const router = useRouter();
     const { data: session, status } = useSession();
     const [tournament, setTournament] = useState<Tournament | null>(null);
-    const [activeTab, setActiveTab] = useState<"players" | "games" | "points">("players");
+    const [activeTab, setActiveTab] = useState<"players" | "games" | "points" | "seasons">("players");
     const [isLoading, setIsLoading] = useState(true);
+
+    // Stagioni
+    const [seasonHistory, setSeasonHistory] = useState<SeasonSummary[]>([]);
+    const [isLoadingSeasons, setIsLoadingSeasons] = useState(false);
+    const [isStartingSeason, setIsStartingSeason] = useState(false);
+    const [seasonActionMessage, setSeasonActionMessage] = useState<string | null>(null);
+
+    // Regole punti (versionate per stagione)
+    const [pointsRule, setPointsRule] = useState<{ winner: number; loser: number; draw: number; absent: number } | null>(null);
+    const [pointsRuleForm, setPointsRuleForm] = useState({ winner: 3, loser: 0, draw: 1, absent: 0 });
+    const [isSavingPointsRule, setIsSavingPointsRule] = useState(false);
+    const [pointsRuleMessage, setPointsRuleMessage] = useState<string | null>(null);
 
     // Edit States
     const [editingPlayer, setEditingPlayer] = useState<string | null>(null);
@@ -80,6 +115,104 @@ export default function AdminDashboard() {
             setTournament(data);
         }
         setIsLoading(false);
+    };
+
+    const fetchSeasonHistory = async () => {
+        setIsLoadingSeasons(true);
+        const res = await fetch(`/api/tournaments/${id}/seasons`);
+        if (res.ok) {
+            const data = await res.json();
+            setSeasonHistory(data.seasons);
+        }
+        setIsLoadingSeasons(false);
+    };
+
+    const fetchPointsRule = async () => {
+        const res = await fetch(`/api/tournaments/${id}/points-rules`);
+        if (res.ok) {
+            const data = await res.json();
+            setPointsRule(data.currentRule);
+            setPointsRuleForm({
+                winner: data.currentRule.winner,
+                loser: data.currentRule.loser,
+                draw: data.currentRule.draw,
+                absent: data.currentRule.absent,
+            });
+        }
+    };
+
+    useEffect(() => {
+        if (activeTab === "seasons" && id && status === "authenticated") {
+            fetchSeasonHistory();
+            fetchPointsRule();
+        }
+    }, [activeTab, id, status]);
+
+    const handleSavePointsRule = async () => {
+        if (!tournament) return;
+        if (
+            !confirm(
+                `La nuova regola punti si applichera' dalla Stagione ${tournament.currentSeason || 1} in poi. ` +
+                `Le stagioni precedenti, gia' chiuse, resteranno invariate con la loro regola originale. Continuare?`
+            )
+        ) {
+            return;
+        }
+
+        setIsSavingPointsRule(true);
+        setPointsRuleMessage(null);
+        try {
+            const res = await fetch(`/api/tournaments/${id}/points-rules`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(pointsRuleForm),
+            });
+            if (res.ok) {
+                setPointsRuleMessage("Regola punti aggiornata.");
+                await fetchPointsRule();
+                await fetchSeasonHistory();
+            } else {
+                const error = await res.json();
+                setPointsRuleMessage(error.message || "Errore nel salvataggio della regola punti.");
+            }
+        } catch (error) {
+            setPointsRuleMessage("Errore di connessione.");
+        } finally {
+            setIsSavingPointsRule(false);
+        }
+    };
+
+    const handleStartNewSeason = async () => {
+        if (!tournament) return;
+        const nextSeason = (tournament.currentSeason || 1) + 1;
+        if (
+            !confirm(
+                `Sei sicuro di voler avviare la Stagione ${nextSeason}?\n\n` +
+                `La Stagione ${tournament.currentSeason || 1} verra' congelata nello storico (visibile a tutti i partecipanti) ` +
+                `e le classifiche in "/tournaments" ripartiranno da zero per la nuova stagione. ` +
+                `Il rating dei giocatori NON viene toccato. Questa azione non e' reversibile.`
+            )
+        ) {
+            return;
+        }
+
+        setIsStartingSeason(true);
+        setSeasonActionMessage(null);
+        try {
+            const res = await fetch(`/api/tournaments/${id}/seasons`, { method: "POST" });
+            if (res.ok) {
+                setSeasonActionMessage(`Stagione ${nextSeason} avviata con successo.`);
+                await fetchTournament();
+                await fetchSeasonHistory();
+            } else {
+                const error = await res.json();
+                setSeasonActionMessage(error.message || "Errore nell'avvio della nuova stagione.");
+            }
+        } catch (error) {
+            setSeasonActionMessage("Errore di connessione.");
+        } finally {
+            setIsStartingSeason(false);
+        }
     };
 
     // Player Actions
@@ -237,6 +370,12 @@ export default function AdminDashboard() {
                         onClick={() => setActiveTab('points')}
                     >
                         Gestione Punti
+                    </a>
+                    <a
+                        className={`tab ${activeTab === 'seasons' ? 'tab-active' : ''}`}
+                        onClick={() => setActiveTab('seasons')}
+                    >
+                        Stagioni
                     </a>
                 </div>
 
@@ -458,6 +597,162 @@ export default function AdminDashboard() {
                                         </button>
                                     </div>
                                 ))}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'seasons' && (
+                    <div className="space-y-6">
+                        <div className="card bg-base-100 shadow-xl">
+                            <div className="card-body">
+                                <h2 className="card-title mb-2">Stagione Corrente: {tournament.currentSeason || 1}</h2>
+                                <p className="text-sm opacity-70 mb-4">
+                                    Avviando una nuova stagione, la Stagione {tournament.currentSeason || 1} resta
+                                    consultabile nello storico (sotto, visibile anche a tutti i partecipanti dalla
+                                    pagina del torneo) mentre le classifiche correnti ripartono da zero. Il rating dei
+                                    giocatori non viene modificato.
+                                </p>
+                                {seasonActionMessage && (
+                                    <div className="alert alert-info mb-4 text-sm">{seasonActionMessage}</div>
+                                )}
+                                <div>
+                                    <button
+                                        onClick={handleStartNewSeason}
+                                        disabled={isStartingSeason}
+                                        className="btn btn-warning"
+                                    >
+                                        {isStartingSeason
+                                            ? "Avvio in corso..."
+                                            : `Avvia Stagione ${(tournament.currentSeason || 1) + 1}`}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="card bg-base-100 shadow-xl">
+                            <div className="card-body">
+                                <h2 className="card-title mb-2">Regole Punti</h2>
+                                <p className="text-sm opacity-70 mb-4">
+                                    Cambiando questi valori, la nuova regola si applica dalla Stagione {tournament.currentSeason || 1} (quella corrente) in poi.
+                                    Le stagioni gia' chiuse restano ancorate alla regola con cui sono state giocate.
+                                </p>
+                                {pointsRuleMessage && (
+                                    <div className="alert alert-info mb-4 text-sm">{pointsRuleMessage}</div>
+                                )}
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+                                    <div className="form-control">
+                                        <label className="label"><span className="label-text">Vittoria</span></label>
+                                        <input
+                                            type="number"
+                                            className="input input-bordered"
+                                            value={pointsRuleForm.winner}
+                                            onChange={(e) => setPointsRuleForm({ ...pointsRuleForm, winner: parseInt(e.target.value) || 0 })}
+                                        />
+                                    </div>
+                                    <div className="form-control">
+                                        <label className="label"><span className="label-text">Sconfitta</span></label>
+                                        <input
+                                            type="number"
+                                            className="input input-bordered"
+                                            value={pointsRuleForm.loser}
+                                            onChange={(e) => setPointsRuleForm({ ...pointsRuleForm, loser: parseInt(e.target.value) || 0 })}
+                                        />
+                                    </div>
+                                    <div className="form-control">
+                                        <label className="label"><span className="label-text">Pareggio</span></label>
+                                        <input
+                                            type="number"
+                                            className="input input-bordered"
+                                            value={pointsRuleForm.draw}
+                                            onChange={(e) => setPointsRuleForm({ ...pointsRuleForm, draw: parseInt(e.target.value) || 0 })}
+                                        />
+                                    </div>
+                                    <div className="form-control">
+                                        <label className="label"><span className="label-text">Assente</span></label>
+                                        <input
+                                            type="number"
+                                            className="input input-bordered"
+                                            value={pointsRuleForm.absent}
+                                            onChange={(e) => setPointsRuleForm({ ...pointsRuleForm, absent: parseInt(e.target.value) || 0 })}
+                                        />
+                                    </div>
+                                </div>
+                                {pointsRule && (
+                                    <p className="text-xs opacity-60 mb-4">
+                                        Regola attualmente in vigore: {pointsRule.winner} vittoria / {pointsRule.loser} sconfitta / {pointsRule.draw} pareggio / {pointsRule.absent} assente.
+                                    </p>
+                                )}
+                                <div>
+                                    <button
+                                        onClick={handleSavePointsRule}
+                                        disabled={isSavingPointsRule}
+                                        className="btn btn-primary"
+                                    >
+                                        {isSavingPointsRule ? "Salvataggio..." : "Salva Regola Punti"}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="card bg-base-100 shadow-xl">
+                            <div className="card-body">
+                                <h2 className="card-title mb-4">Storico Stagioni</h2>
+                                {isLoadingSeasons ? (
+                                    <span className="loading loading-spinner"></span>
+                                ) : seasonHistory.length === 0 ? (
+                                    <p className="text-gray-500 italic">Nessuna stagione trovata.</p>
+                                ) : (
+                                    <div className="space-y-4">
+                                        {seasonHistory.map((s) => (
+                                            <div key={s.season} className="collapse collapse-arrow bg-base-200">
+                                                <input type="checkbox" defaultChecked={s.isCurrent} />
+                                                <div className="collapse-title font-bold">
+                                                    Stagione {s.season} {s.isCurrent && <span className="badge badge-success ml-2">In corso</span>}
+                                                    <span className="text-sm font-normal opacity-70 ml-2">
+                                                        ({s.gamesPlayed} partite)
+                                                    </span>
+                                                </div>
+                                                <div className="collapse-content">
+                                                    <div className="flex gap-6 mb-3 text-sm">
+                                                        <div>🥇 Capocannoniere: <strong>{s.topScorer ? `${s.topScorer.name} (${s.topScorer.goals})` : "N/A"}</strong></div>
+                                                        <div>🏅 MVP Stagione: <strong>{s.topMvp ? `${s.topMvp.name} (${s.topMvp.mvps})` : "N/A"}</strong></div>
+                                                    </div>
+                                                    <div className="overflow-x-auto">
+                                                        <table className="table table-sm w-full">
+                                                            <thead>
+                                                                <tr>
+                                                                    <th>#</th>
+                                                                    <th>Giocatore</th>
+                                                                    <th>Pt</th>
+                                                                    <th>V</th>
+                                                                    <th>P</th>
+                                                                    <th>S</th>
+                                                                    <th>Gol</th>
+                                                                    <th>MVP</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {s.standings.map((row, idx) => (
+                                                                    <tr key={row.playerId}>
+                                                                        <td>{idx + 1}</td>
+                                                                        <td>{row.name}</td>
+                                                                        <td className="font-bold">{row.points}</td>
+                                                                        <td>{row.wins}</td>
+                                                                        <td>{row.draws}</td>
+                                                                        <td>{row.losses}</td>
+                                                                        <td>{row.goals}</td>
+                                                                        <td>{row.mvps}</td>
+                                                                    </tr>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>

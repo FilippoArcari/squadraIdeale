@@ -38,7 +38,7 @@ export default function Home() {
       <div className="navbar bg-base-100/80 backdrop-blur-md shadow-lg sticky top-0 z-50">
         <div className="flex-1">
           <span className="text-2xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-            ⚽ Squadra Ideale
+            Squadra Ideale
           </span>
         </div>
         <div className="flex-none gap-2">
@@ -239,7 +239,7 @@ export default function Home() {
             </svg>
             Crea il Tuo Primo Torneo
           </Link>
-          <p className="mt-4 opacity-75">✨ Gratis • Senza carta di credito</p>
+          <p className="mt-4 opacity-75">Gratis • Senza carta di credito</p>
         </div>
       </div>
 

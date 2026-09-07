@@ -4,6 +4,7 @@ import Game from "@/models/Game";
 import Player from "@/models/Player";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { resolvePointsRule, pointsForOutcome, outcomeFor } from "@/lib/pointsRules";
 
 export const dynamic = 'force-dynamic';
 
@@ -48,6 +49,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             return NextResponse.json({ message: "Unauthorized" }, { status: 403 });
         }
 
+        // Regola punti in vigore per la STAGIONE di questa partita (non quella
+        // corrente del torneo): garantisce che modificare una partita di una
+        // stagione ormai chiusa continui a usare la formula di allora.
+        // game.turnament e' gia' popolato per intero (vedi query sopra), quindi
+        // pointsRuleHistory e' gia' disponibile senza una query aggiuntiva.
+        const rule = resolvePointsRule((game.turnament as any).pointsRuleHistory, game.season || 1);
+
         // If the game is already finalized, we need to subtract the old stats before updating
         if (game.isFinalized) {
             // Subtract goals
@@ -87,7 +95,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             for (const playerId of allPlayers) {
                 const isWinner = winningTeam.includes(playerId);
                 const isDraw = winningTeam.length === 0;
-                const points = isWinner ? 3 : (isDraw ? 1 : 0);
+                const points = pointsForOutcome(rule, outcomeFor(isWinner, isDraw));
 
                 await Player.findByIdAndUpdate(playerId, {
                     $inc: {
@@ -150,7 +158,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             for (const playerId of allPlayers) {
                 const isWinner = winningTeam.includes(playerId);
                 const isDraw = winningTeam.length === 0;
-                const points = isWinner ? 3 : (isDraw ? 1 : 0);
+                const points = pointsForOutcome(rule, outcomeFor(isWinner, isDraw));
 
                 await Player.findByIdAndUpdate(playerId, {
                     $inc: {
