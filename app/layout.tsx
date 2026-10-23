@@ -3,14 +3,20 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import Provider from "./Provider";
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: {
-    default: "Squadra Ideale - Organizza Tornei Sportivi e Crea Formazioni Perfette",
-    template: "%s | Squadra Ideale"
+    default:
+      "Squadra Ideale - Organizza Tornei Sportivi e Crea Formazioni Perfette",
+    template: "%s | Squadra Ideale",
   },
-  description: "Squadra Ideale è la piattaforma definitiva per organizzare tornei di calcio, basket e volley. Bilancia squadre automaticamente, traccia statistiche e gestisci i tuoi tornei con facilità. Gratis e facile da usare.",
+  description:
+    "Squadra Ideale è la piattaforma definitiva per organizzare tornei di calcio, basket e volley. Bilancia squadre automaticamente, traccia statistiche e gestisci i tuoi tornei con facilità. Gratis e facile da usare.",
   keywords: [
     "squadra ideale",
     "tornei calcio",
@@ -24,7 +30,7 @@ export const metadata: Metadata = {
     "calcio amatoriale",
     "tornei amici",
     "app tornei calcio",
-    "squadre equilibrate"
+    "squadre equilibrate",
   ],
   authors: [{ name: "Squadra Ideale" }],
   creator: "Squadra Ideale",
@@ -35,7 +41,8 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: "Squadra Ideale - Organizza Tornei e Crea Formazioni Perfette",
-    description: "Organizza tornei sportivi, bilancia squadre automaticamente e traccia statistiche. La piattaforma completa per gestire i tuoi tornei.",
+    description:
+      "Organizza tornei sportivi, bilancia squadre automaticamente e traccia statistiche. La piattaforma completa per gestire i tuoi tornei.",
     url: "https://squadra-ideale.vercel.app",
     siteName: "Squadra Ideale",
     locale: "it_IT",
@@ -52,7 +59,8 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Squadra Ideale - Organizza Tornei Sportivi",
-    description: "Organizza tornei, bilancia squadre e traccia statistiche facilmente",
+    description:
+      "Organizza tornei, bilancia squadre e traccia statistiche facilmente",
     images: ["/calcio_vert.jpeg"],
   },
   robots: {
@@ -67,7 +75,7 @@ export const metadata: Metadata = {
     },
   },
   verification: {
-    google: 'DSrPfCD1XAl4LE1sevq1T1mLkNm1uDRIBDJTQdSb_Gg',
+    google: "DSrPfCD1XAl4LE1sevq1T1mLkNm1uDRIBDJTQdSb_Gg",
   },
 };
 
@@ -77,8 +85,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="it">
-      <body className={inter.className}>
+    <html lang="it" data-theme="squadra" data-scroll-behavior="smooth">
+      <body className={`${inter.className} ${inter.variable}`}>
         <Provider>{children}</Provider>
       </body>
     </html>

@@ -1,327 +1,348 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { positions } from "../../models/enums";
+import Navbar from "../components/Navbar";
+import Icon from "@/components/Icon";
+import { positions } from "@/models/enums";
 import { balanceTeams } from "@/lib/balanceTeams";
-import { PlayerToken } from "@/components/PlayerToken";
-import { TeamDropZone } from "@/components/TeamDropZone";
-import { DndContext, DragEndEvent, TouchSensor, MouseSensor, useSensor, useSensors } from '@dnd-kit/core';
 
 interface Player {
-    id?: string;
-    _id?: string;
-    name: string;
-    rating: number;
-    position: string;
+  id: string;
+  name: string;
+  rating: number;
+  position: string;
 }
 
 export default function TeamBalancer() {
-    const [players, setPlayers] = useState<Player[]>([]);
-    const [manualPlayerName, setManualPlayerName] = useState("");
-    const [manualPlayerRating, setManualPlayerRating] = useState(50);
-    const [manualPlayerPosition, setManualPlayerPosition] = useState("Centrocampista");
-    const [teamA, setTeamA] = useState<Player[]>([]);
-    const [teamB, setTeamB] = useState<Player[]>([]);
-    const [isBalanced, setIsBalanced] = useState(false);
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [name, setName] = useState("");
+  const [rating, setRating] = useState(50);
+  const [position, setPosition] = useState("Centrocampista");
+  const [teams, setTeams] = useState<{
+    teamA: Player[];
+    teamB: Player[];
+  } | null>(null);
+  const [announcement, setAnnouncement] = useState("");
+  const nameRef = useRef<HTMLInputElement>(null);
+  const outputRef = useRef<HTMLElement>(null);
 
-    const sensors = useSensors(
-        useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
-        useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } })
+  const addPlayer = (e: FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+    setPlayers([
+      ...players,
+      { id: crypto.randomUUID(), name: name.trim(), rating, position },
+    ]);
+    setName("");
+    setTeams(null);
+    setAnnouncement(`${name.trim()} aggiunto al gruppo.`);
+    nameRef.current?.focus();
+  };
+  const removePlayer = (id: string) => {
+    setPlayers(players.filter((p) => p.id !== id));
+    setTeams(null);
+  };
+  const generate = () => {
+    if (players.length < 2) return;
+    setTeams(balanceTeams(players));
+    setAnnouncement(
+      `Squadre pronte: ${Math.ceil(players.length / 2)} e ${Math.floor(players.length / 2)} giocatori.`,
     );
+    requestAnimationFrame(() => outputRef.current?.focus());
+  };
+  const movePlayer = (player: Player, from: "teamA" | "teamB") => {
+    if (!teams) return;
+    const to = from === "teamA" ? "teamB" : "teamA";
+    setTeams({
+      ...teams,
+      [from]: teams[from].filter((p) => p.id !== player.id),
+      [to]: [...teams[to], player],
+    });
+    setAnnouncement(
+      `${player.name} spostato nella squadra ${to === "teamA" ? "A" : "B"}.`,
+    );
+    requestAnimationFrame(() =>
+      outputRef.current
+        ?.querySelector<HTMLButtonElement>(`[data-move-player="${player.id}"]`)
+        ?.focus({ preventScroll: true }),
+    );
+  };
+  const average = (team: Player[]) =>
+    team.length
+      ? (team.reduce((sum, p) => sum + p.rating, 0) / team.length).toFixed(1)
+      : "–";
 
-    const handleDragEnd = (event: DragEndEvent) => {
-        const { active, over } = event;
-        if (!over) return;
-
-        const playerId = active.id as string;
-        const targetTeam = over.id as 'A' | 'B';
-
-        const sourceIsTeamA = teamA.some(p => (p._id || p.id) === playerId);
-        const sourceIsTeamB = teamB.some(p => (p._id || p.id) === playerId);
-
-        const playerToMove = teamA.find(p => (p._id || p.id) === playerId) || teamB.find(p => (p._id || p.id) === playerId);
-
-        if (!playerToMove) return;
-
-        if (targetTeam === 'A' && sourceIsTeamB) {
-            setTeamB(teamB.filter(p => (p._id || p.id) !== playerId));
-            setTeamA([...teamA, playerToMove]);
-        } else if (targetTeam === 'B' && sourceIsTeamA) {
-            setTeamA(teamA.filter(p => (p._id || p.id) !== playerId));
-            setTeamB([...teamB, playerToMove]);
-        }
-    };
-
-    const addPlayer = () => {
-        if (!manualPlayerName.trim()) return;
-
-        const newPlayer: Player = {
-            id: `player_${Date.now()}`,
-            name: manualPlayerName.trim(),
-            position: manualPlayerPosition,
-            rating: manualPlayerRating,
-        };
-
-        setPlayers([...players, newPlayer]);
-        setManualPlayerName("");
-        setManualPlayerRating(50);
-        setManualPlayerPosition("Centrocampista");
-        setIsBalanced(false);
-    };
-
-    const removePlayer = (playerId: string) => {
-        setPlayers(players.filter((p) => p.id !== playerId));
-        setIsBalanced(false);
-    };
-
-    const clearAll = () => {
-        setPlayers([]);
-        setTeamA([]);
-        setTeamB([]);
-        setIsBalanced(false);
-    };
-
-    const handleBalanceTeams = () => {
-        const { teamA: tA, teamB: tB } = balanceTeams(players);
-        setTeamA(tA);
-        setTeamB(tB);
-        setIsBalanced(true);
-    };
-
-    return (
-        <div className="min-h-screen bg-base-200">
-            {/* Header */}
-            <div className="navbar bg-base-100 shadow-lg">
-                <div className="flex-1">
-                    <Link href="/" className="btn btn-ghost text-xl">
-                        ⚽ Squadra Ideale
-                    </Link>
-                </div>
-                <div className="flex-none gap-2">
-                    <Link href="/login" className="btn btn-ghost">
-                        Accedi
-                    </Link>
-                    <Link href="/register" className="btn btn-primary">
-                        Registrati
-                    </Link>
-                </div>
-            </div>
-
-            <div className="container mx-auto p-6">
-                <div className="text-center mb-8">
-                    <h1 className="text-4xl font-bold mb-2">Bilancia Squadre</h1>
-                    <p className="text-lg opacity-70">
-                        Aggiungi giocatori e crea squadre equilibrate in pochi secondi
-                    </p>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    {/* Left Column - Player Management */}
-                    <div className="space-y-6">
-                        {/* Add Player Card */}
-                        <div className="card bg-base-100 shadow-xl">
-                            <div className="card-body">
-                                <h2 className="card-title mb-4">Aggiungi Giocatore</h2>
-                                <div className="flex gap-2 mb-2">
-                                    <input
-                                        type="text"
-                                        placeholder="Nome"
-                                        value={manualPlayerName}
-                                        onChange={(e) => setManualPlayerName(e.target.value)}
-                                        onKeyPress={(e) => e.key === 'Enter' && addPlayer()}
-                                        className="input input-bordered flex-1"
-                                    />
-                                    <input
-                                        type="number"
-                                        placeholder="Valutazione"
-                                        value={manualPlayerRating}
-                                        onChange={(e) => setManualPlayerRating(parseInt(e.target.value) || 0)}
-                                        className="input input-bordered w-24"
-                                        min="0"
-                                        max="100"
-                                    />
-                                </div>
-                                <div className="mb-2">
-                                    <select
-                                        value={manualPlayerPosition}
-                                        onChange={(e) => setManualPlayerPosition(e.target.value)}
-                                        className="select select-bordered w-full"
-                                    >
-                                        <option value="Portiere">Portiere</option>
-                                        <option value="Difensore">Difensore</option>
-                                        <option value="Centrocampista">Centrocampista</option>
-                                        <option value="Attaccante">Attaccante</option>
-                                    </select>
-                                </div>
-                                <button
-                                    onClick={addPlayer}
-                                    className="btn btn-primary w-full"
-                                    disabled={!manualPlayerName.trim()}
-                                >
-                                    Aggiungi Giocatore
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* Players List */}
-                        <div className="card bg-base-100 shadow-xl">
-                            <div className="card-body">
-                                <div className="flex justify-between items-center mb-4">
-                                    <h2 className="card-title">
-                                        Giocatori ({players.length})
-                                    </h2>
-                                    {players.length > 0 && (
-                                        <button
-                                            onClick={clearAll}
-                                            className="btn btn-sm btn-ghost btn-error"
-                                        >
-                                            Cancella Tutti
-                                        </button>
-                                    )}
-                                </div>
-                                {players.length === 0 ? (
-                                    <div className="text-center py-8 opacity-50">
-                                        <p>Nessun giocatore aggiunto</p>
-                                        <p className="text-sm mt-2">Aggiungi almeno 2 giocatori per bilanciare le squadre</p>
-                                    </div>
-                                ) : (
-                                    <div className="space-y-2 max-h-96 overflow-y-auto">
-                                        {players.map((player) => (
-                                            <div
-                                                key={player.id}
-                                                className="flex justify-between items-center p-3 bg-base-200 rounded-lg"
-                                            >
-                                                <div>
-                                                    <div className="font-medium">{player.name}</div>
-                                                    <div className="text-xs opacity-70">
-                                                        {player.position} • Rating: {player.rating}
-                                                    </div>
-                                                </div>
-                                                <button
-                                                    onClick={() => removePlayer(player.id!)}
-                                                    className="btn btn-sm btn-ghost btn-circle"
-                                                >
-                                                    ✕
-                                                </button>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Right Column - Teams Display */}
-                    <div>
-                        <div className="flex justify-center mb-6">
-                            <button
-                                onClick={handleBalanceTeams}
-                                disabled={players.length < 2}
-                                className="btn btn-primary btn-lg w-full max-w-xs">
-                                {isBalanced ? "Rigenera Squadre" : "Bilancia Squadre"}
-                            </button>
-                        </div>
-
-                        {isBalanced && (
-                            <div className="w-full max-w-md md:max-w-xl lg:max-w-2xl mx-auto">
-                                <div className="relative w-full  bg-cover bg-center rounded-xl overflow-hidden shadow-2xl border-4 border-white/20"
-                                    style={{ backgroundImage: "url('/calcio_vert.jpeg')" }}>
-                                    
-                                    <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-                                    
-                                    {/* Overlay for better text visibility */}
-                                    <div className="absolute inset-0 bg-black/10"></div>
-
-                                    {/* Team A - Top Half */}
-                                    <TeamDropZone id="A" className="w-full h-1/2 py-6 px-2 flex flex-col justify-start gap-1 md:gap-4 relative">
-                                        <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-info/80 text-white px-3 py-1 rounded-full text-xs font-bold shadow-lg backdrop-blur-sm z-10">
-                                            Squadra A (Avg: {teamA.length > 0 ? (teamA.reduce((a, b) => a + b.rating, 0) / teamA.length).toFixed(1) : '0'})
-                                        </div>
-
-                                        {/* Formation Rows for Team A (Top to Bottom: GK -> DEF -> MID -> ATT) */}
-                                        <div className="flex justify-center z-10 relative">
-                                            {teamA.filter(p => p.position === 'Portiere').map(p => (
-                                                <PlayerToken key={p.id || p._id} player={p} color="info" />
-                                            ))}
-                                        </div>
-                                        <div className="flex justify-evenly z-10 relative">
-                                            {teamA.filter(p => p.position === 'Difensore').map(p => (
-                                                <PlayerToken key={p.id || p._id} player={p} color="info" />
-                                            ))}
-                                        </div>
-                                        <div className="flex justify-evenly z-10 relative">
-                                            {teamA.filter(p => p.position === 'Centrocampista' || p.position === 'Jolly').map(p => (
-                                                <PlayerToken key={p.id || p._id} player={p} color="info" />
-                                            ))}
-                                        </div>
-                                        <div className="flex justify-evenly z-10 relative">
-                                            {teamA.filter(p => p.position === 'Attaccante').map(p => (
-                                                <PlayerToken key={p.id || p._id} player={p} color="info" />
-                                            ))}
-                                        </div>
-                                    </TeamDropZone>
-
-                                    {/* MidLine */}
-                                    <div className="absolute top-1/2 left-0 w-full h-1 bg-white/50 z-20"></div>
-                                    <div className="w-full h-1/2 py-6 px-2 flex flex-col-reverse justify-start gap-4 pointer-events-none"></div>
-                                    
-                                    {/* Team B - Bottom Half */}
-                                    <TeamDropZone id="B" className="w-full absolute bottom-0 h-1/2 py-6 px-2 flex flex-col-reverse justify-start gap-4 relative">
-                                        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-error/80 text-white px-3 py-1 rounded-full text-xs font-bold shadow-lg backdrop-blur-sm z-10">
-                                            Squadra B (Avg: {teamB.length > 0 ? (teamB.reduce((a, b) => a + b.rating, 0) / teamB.length).toFixed(1) : '0'})
-                                        </div>
-
-                                        {/* Formation Rows for Team B (Bottom to Top: GK -> DEF -> MID -> ATT) */}
-                                        <div className="flex justify-center z-10 relative">
-                                            {teamB.filter(p => p.position === 'Portiere').map(p => (
-                                                <PlayerToken key={p.id || p._id} player={p} color="error" />
-                                            ))}
-                                        </div>
-                                        <div className="flex justify-evenly z-10 relative">
-                                            {teamB.filter(p => p.position === 'Difensore').map(p => (
-                                                <PlayerToken key={p.id || p._id} player={p} color="error" />
-                                            ))}
-                                        </div>
-                                        <div className="flex justify-evenly z-10 relative">
-                                            {teamB.filter(p => p.position === 'Centrocampista' || p.position === 'Jolly').map(p => (
-                                                <PlayerToken key={p.id || p._id} player={p} color="error" />
-                                            ))}
-                                        </div>
-                                        <div className="flex justify-evenly z-10 relative">
-                                            {teamB.filter(p => p.position === 'Attaccante').map(p => (
-                                                <PlayerToken key={p.id || p._id} player={p} color="error" />
-                                            ))}
-                                        </div>
-                                    </TeamDropZone>
-                                    
-                                    </DndContext>
-                                </div>
-
-                                {/* Team Stats */}
-                                <div className="mt-6 grid grid-cols-2 gap-4">
-                                    <div className="stat bg-info/10 rounded-lg p-4">
-                                        <div className="stat-title text-info">Squadra A</div>
-                                        <div className="stat-value text-info text-2xl">{teamA.length}</div>
-                                        <div className="stat-desc">giocatori</div>
-                                    </div>
-                                    <div className="stat bg-error/10 rounded-lg p-4">
-                                        <div className="stat-title text-error">Squadra B</div>
-                                        <div className="stat-value text-error text-2xl">{teamB.length}</div>
-                                        <div className="stat-desc">giocatori</div>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {!isBalanced && players.length >= 2 && (
-                            <div className="text-center py-12 opacity-50">
-                                <p className="text-lg">Clicca su "Bilancia Squadre" per iniziare</p>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            </div>
+  return (
+    <div className="min-h-screen">
+      <Navbar />
+      <main id="main-content" className="page-width app-main">
+        <div className="page-intro">
+          <div>
+            <p className="eyebrow">DUE SQUADRE. UNA BELLA PARTITA.</p>
+            <h1>Le squadre si fanno qui.</h1>
+            <p>
+              Aggiungi chi gioca. Noi bilanciamo ruoli e valutazioni, tu pensi
+              al campo.
+            </p>
+          </div>
+          <span className="badge badge-primary">
+            <Icon name="check" size={12} />
+            Gratis · Nessun account richiesto
+          </span>
         </div>
-    );
+        <p className="sr-only" role="status" aria-live="polite">
+          {announcement}
+        </p>
+        <div className="builder-layout">
+          <div className="builder-sidebar">
+            <section className="panel">
+              <div className="panel-heading">
+                <h2>
+                  <span className="step-marker">1</span>Aggiungi i giocatori
+                </h2>
+                <Icon name="users" size={18} className="text-primary" />
+              </div>
+              <form className="panel-body player-form" onSubmit={addPlayer}>
+                <div className="form-control">
+                  <label className="field-label" htmlFor="player-name">
+                    Nome del giocatore
+                  </label>
+                  <input
+                    ref={nameRef}
+                    id="player-name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="input"
+                    placeholder="Es. Marco"
+                    required
+                    maxLength={60}
+                    autoComplete="off"
+                  />
+                </div>
+                <div className="form-control">
+                  <label className="field-label" htmlFor="player-role">
+                    Ruolo
+                  </label>
+                  <select
+                    id="player-role"
+                    className="select"
+                    value={position}
+                    onChange={(e) => setPosition(e.target.value)}
+                  >
+                    {positions.map((p) => (
+                      <option key={p}>{p}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-control">
+                  <label
+                    className="field-label rating-label"
+                    htmlFor="player-rating"
+                  >
+                    Valutazione
+                    <span className="rating-value">{rating} / 100</span>
+                  </label>
+                  <input
+                    id="player-rating"
+                    type="range"
+                    min="0"
+                    max="100"
+                    className="range range-primary range-sm"
+                    value={rating}
+                    onChange={(e) => setRating(Number(e.target.value))}
+                  />
+                  <div className="range-legend">
+                    <span>Principiante</span>
+                    <span>Esperto</span>
+                  </div>
+                  <p className="field-hint">
+                    Non sai cosa mettere? Parti da 50.
+                  </p>
+                </div>
+                <button
+                  className="btn btn-primary"
+                  type="submit"
+                  disabled={!name.trim()}
+                >
+                  <Icon name="plus" size={17} />
+                  Aggiungi al gruppo
+                </button>
+              </form>
+            </section>
+            <section className="panel">
+              <div className="panel-heading">
+                <h2>
+                  Il gruppo{" "}
+                  <span className="badge badge-ghost">{players.length}</span>
+                </h2>
+                {players.length > 0 && (
+                  <button
+                    className="text-xs text-error min-h-9"
+                    onClick={() => {
+                      setPlayers([]);
+                      setTeams(null);
+                      setAnnouncement("Gruppo svuotato.");
+                    }}
+                  >
+                    Svuota
+                  </button>
+                )}
+              </div>
+              {players.length ? (
+                <ul className="roster-list">
+                  {players.map((p) => (
+                    <li key={p.id} className="roster-row">
+                      <span className="roster-avatar">
+                        {p.name.substring(0, 2).toUpperCase()}
+                      </span>
+                      <div>
+                        <strong>{p.name}</strong>
+                        <small>{p.position}</small>
+                      </div>
+                      <span className="roster-rating">{p.rating}</span>
+                      <button
+                        className="icon-button"
+                        aria-label={`Rimuovi ${p.name}`}
+                        onClick={() => removePlayer(p.id)}
+                      >
+                        <Icon name="close" size={15} />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="roster-empty">
+                  Il campo aspetta il vostro gruppo.
+                  <br />
+                  Inizia aggiungendo il primo giocatore.
+                </p>
+              )}
+            </section>
+          </div>
+          <div>
+            <section
+              ref={outputRef}
+              tabIndex={-1}
+              className="panel builder-output"
+              aria-label="Le tue formazioni"
+            >
+              <div className="output-heading">
+                <h2>
+                  <span className="step-marker">2</span>Le tue formazioni
+                </h2>
+                <span>{players.length} giocatori disponibili</span>
+              </div>
+              {teams ? (
+                <div className="teams-result">
+                  <div className="balance-status">
+                    <Icon name="check" size={17} />
+                    <span>
+                      {!teams.teamA.length || !teams.teamB.length ? (
+                        "Una squadra è vuota. Sposta un giocatore o rigenera le squadre."
+                      ) : (
+                        <>
+                          Squadre pronte.{" "}
+                          {players.length % 2
+                            ? "Con un numero dispari, una squadra ha un giocatore in più."
+                            : "Si può scendere in campo."}
+                        </>
+                      )}
+                    </span>
+                  </div>
+                  <div className="teams-columns">
+                    {(["teamA", "teamB"] as const).map((key, i) => (
+                      <section
+                        key={key}
+                        className={`result-team ${i ? "result-team-b" : ""}`}
+                      >
+                        <header>
+                          <h3>
+                            <i
+                              className={`team-dot ${i ? "team-dot-b" : "team-dot-a"}`}
+                            />
+                            Squadra {i ? "B" : "A"}
+                          </h3>
+                          <p>
+                            {teams[key].length} giocatori · Media{" "}
+                            {average(teams[key])}
+                          </p>
+                        </header>
+                        {teams[key].length ? (
+                          teams[key].map((p) => (
+                            <div key={p.id} className="result-player">
+                              <div>
+                                <strong>{p.name}</strong>
+                                <span>
+                                  {p.position} · {p.rating}
+                                </span>
+                              </div>
+                              <button
+                                className="icon-button"
+                                onClick={() => movePlayer(p, key)}
+                                data-move-player={p.id}
+                                aria-label={`Sposta ${p.name} nella squadra ${i ? "A" : "B"}`}
+                                title={`Sposta nella squadra ${i ? "A" : "B"}`}
+                              >
+                                <Icon name={i ? "back" : "arrow"} size={16} />
+                              </button>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="team-empty">Nessun giocatore.</p>
+                        )}
+                      </section>
+                    ))}
+                  </div>
+                  <p className="result-hint">
+                    <Icon name="shuffle" size={15} />
+                    Usa le frecce per cambiare squadra a un giocatore. Le medie
+                    si aggiornano subito.
+                  </p>
+                </div>
+              ) : (
+                <div className="empty-state builder-empty">
+                  <span className="empty-icon">
+                    <Icon name="pitch" size={48} />
+                  </span>
+                  <h3>
+                    {players.length >= 2
+                      ? "Il gruppo c’è. Facciamo le squadre?"
+                      : "Il campo è vostro."}
+                  </h3>
+                  <p>
+                    {players.length >= 2
+                      ? "Crea le formazioni con il pulsante qui sotto. Potrai spostare i giocatori anche dopo."
+                      : "Aggiungi almeno 2 giocatori: troverai qui le due squadre, bilanciate per ruolo e livello."}
+                  </p>
+                </div>
+              )}
+              <div className="builder-footer">
+                <button
+                  className="btn btn-primary"
+                  onClick={generate}
+                  disabled={players.length < 2}
+                >
+                  <Icon name="shuffle" size={18} />
+                  {teams ? "Rigenera le squadre" : "Crea squadre equilibrate"}
+                </button>
+                <p>
+                  {players.length < 2
+                    ? `${players.length === 1 ? "Manca" : "Mancano"} ${2 - players.length} giocator${players.length === 1 ? "e" : "i"} per iniziare.`
+                    : "Ogni generazione prova una nuova combinazione di giocatori."}
+                </p>
+              </div>
+            </section>
+            <div className="builder-callout">
+              <span>Vuoi conservare risultati e classifiche?</span>
+              <Link href="/register">
+                Crea un torneo
+                <Icon name="arrow" size={15} />
+              </Link>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
 }

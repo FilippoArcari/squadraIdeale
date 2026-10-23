@@ -1,362 +1,538 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
-import Navbar from "../components/Navbar";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+import Navbar from "../components/Navbar";
+import Icon from "@/components/Icon";
+import Modal from "@/components/Modal";
+import { positions } from "@/models/enums";
 
 interface Tournament {
-    _id: string;
-    name: string;
-    sport: string;
-    season: number;
-    status: string;
+  _id: string;
+  name: string;
+  sport: string;
+  season: number;
+  status: string;
+  participants?: string[];
 }
 
 export default function Dashboard() {
-    const { data: session, status } = useSession();
-    const [tournaments, setTournaments] = useState<Tournament[]>([]);
-    const [showModal, setShowModal] = useState(false);
-    const [showJoinModal, setShowJoinModal] = useState(false);
-    const [joinCode, setJoinCode] = useState("");
-    const [playerName, setPlayerName] = useState("");
-    const [position, setPosition] = useState("Centrocampista");
-    const [rating, setRating] = useState(50);
-    const [isJoining, setIsJoining] = useState(false);
-    const [notification, setNotification] = useState<{ type: "success" | "error"; message: string } | null>(null);
-    const [newTournament, setNewTournament] = useState({
-        name: "",
-        sport: "Calcio",
-        season: new Date().getFullYear(),
-        description: "",
-    });
-    const router = useRouter();
+  const { data: session, status } = useSession();
+  const router = useRouter();
+  const [tournaments, setTournaments] = useState<Tournament[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [modal, setModal] = useState<"create" | "join" | null>(null);
+  const [formError, setFormError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [filter, setFilter] = useState("all");
+  const [query, setQuery] = useState("");
+  const [joinCode, setJoinCode] = useState("");
+  const [playerName, setPlayerName] = useState("");
+  const [position, setPosition] = useState("Centrocampista");
+  const [rating, setRating] = useState(50);
+  const [newTournament, setNewTournament] = useState({
+    name: "",
+    sport: "Calcio",
+    season: new Date().getFullYear(),
+    description: "",
+  });
 
-    useEffect(() => {
-        fetchTournaments();
-    }, []);
+  const fetchTournaments = useCallback(async () => {
+    setLoading(true);
+    setLoadError("");
+    try {
+      const res = await fetch("/api/tournaments");
+      if (!res.ok) throw new Error();
+      setTournaments(await res.json());
+    } catch {
+      setLoadError(
+        "Non riusciamo a caricare i tuoi tornei. Riprova tra un momento.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+  useEffect(() => {
+    if (status === "unauthenticated") router.replace("/login");
+    if (status === "authenticated") void fetchTournaments();
+  }, [status, router, fetchTournaments]);
 
-    const fetchTournaments = async () => {
-        const res = await fetch("/api/tournaments");
-        if (res.ok) {
-            const data = await res.json();
-            setTournaments(data);
-        }
-    };
-
-    const handleCreate = async (e: React.FormEvent) => {
-        e.preventDefault();
-        const res = await fetch("/api/tournaments", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(newTournament),
-        });
-
-        if (res.ok) {
-            setShowModal(false);
-            fetchTournaments();
-            setNewTournament({ name: "", sport: "Calcio", season: new Date().getFullYear(), description: "" });
-        }
-    };
-
-    const handleJoin = async (e: React.FormEvent) => {
-        e.preventDefault();
-
-        if (!playerName.trim()) {
-            setNotification({ type: "error", message: "Inserisci il nome del giocatore" });
-            return;
-        }
-
-        setIsJoining(true);
-        try {
-            const res = await fetch("/api/tournaments/join", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    joinCode: joinCode.toUpperCase(),
-                    playerName: playerName,
-                    position: position,
-                    rating: rating,
-                }),
-            });
-
-            const data = await res.json();
-
-            if (res.ok) {
-                setNotification({ type: "success", message: "Sei entrato nel torneo!" });
-                setShowJoinModal(false);
-                setJoinCode("");
-                setPlayerName("");
-                setPosition("Centrocampista");
-                setRating(50);
-
-                // Redirect to tournament page
-                setTimeout(() => {
-                    router.push(`/tournaments/${data.tournament._id}`);
-                }, 1500);
-            } else {
-                setNotification({ type: "error", message: data.message || "Errore nell'unirsi al torneo" });
-            }
-        } catch (error) {
-            setNotification({ type: "error", message: "Errore di connessione" });
-        } finally {
-            setIsJoining(false);
-        }
-    };
-
-    // Authentication check
-    if (status === "loading") {
-        return (
-            <div className="min-h-screen bg-base-200 flex items-center justify-center">
-                <span className="loading loading-spinner loading-lg"></span>
-            </div>
+  const openModal = (next: "create" | "join") => {
+    setFormError("");
+    setModal(next);
+    if (next === "join" && !playerName)
+      setPlayerName(session?.user?.name || "");
+  };
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    setFormError("");
+    try {
+      const joining = modal === "join";
+      const res = await fetch(
+        joining ? "/api/tournaments/join" : "/api/tournaments",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(
+            joining
+              ? {
+                  joinCode: joinCode.trim().toUpperCase(),
+                  playerName: playerName.trim(),
+                  position,
+                  rating,
+                }
+              : { ...newTournament, name: newTournament.name.trim() },
+          ),
+        },
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        setFormError(
+          res.status === 401
+            ? "La sessione è scaduta. Accedi di nuovo per continuare."
+            : joining && res.status === 404
+              ? "Codice non trovato. Controlla le 6 lettere e numeri ricevuti dall’organizzatore."
+              : joining && res.status === 409
+                ? "Fai già parte di questo torneo. Lo trovi nell’elenco dei tuoi tornei."
+                : "Operazione non riuscita. Controlla i dati e riprova.",
         );
+        return;
+      }
+      router.push(`/tournaments/${joining ? data.tournament._id : data._id}`);
+    } catch {
+      setFormError(
+        "Connessione interrotta. I tuoi dati sono ancora qui: riprova.",
+      );
+    } finally {
+      setBusy(false);
     }
+  };
+  const active = tournaments.filter((t) => t.status === "active").length;
+  const visible = tournaments.filter(
+    (t) =>
+      (filter === "all" ||
+        (filter === "active"
+          ? t.status === "active"
+          : t.status !== "active")) &&
+      t.name.toLocaleLowerCase("it").includes(query.toLocaleLowerCase("it")),
+  );
 
-    if (status === "unauthenticated") {
-        router.push("/login");
-        return null;
-    }
-
-    return (
-        <div className="min-h-screen bg-base-200">
-            <Navbar />
-            <div className="container mx-auto p-6">
-                {/* Notifications */}
-                {notification && (
-                    <div className="toast toast-top toast-end z-50">
-                        <div className={`alert ${notification.type === "success" ? "alert-success" : "alert-error"}`}>
-                            <span>{notification.message}</span>
-                        </div>
-                    </div>
-                )}
-
-                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-8 gap-4">
-                    <h1 className="text-3xl font-bold">I Tuoi Tornei</h1>
-
-                    {/* Mobile Dropdown Menu */}
-                    <div className="dropdown dropdown-end md:hidden">
-                        <label tabIndex={0} className="btn btn-primary w-full">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                                <path d="M6 10a2 2 0 11-4 0 2 2 0 014 0zM12 10a2 2 0 11-4 0 2 2 0 014 0zM16 12a2 2 0 100-4 2 2 0 000 4z" />
-                            </svg>
-                            Menu Azioni
-                        </label>
-                        <ul tabIndex={0} className="dropdown-content z-[1] menu p-2 shadow-lg bg-base-100 rounded-box w-64 mt-2">
-                            <li>
-                                <a onClick={() => setShowJoinModal(true)} className="text-base">
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                        <path fillRule="evenodd" d="M3 3a1 1 0 011 1v12a1 1 0 11-2 0V4a1 1 0 011-1zm7.707 3.293a1 1 0 010 1.414L9.414 9H17a1 1 0 110 2H9.414l1.293 1.293a1 1 0 01-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0z" clipRule="evenodd" />
-                                    </svg>
-                                    Entra in un Torneo
-                                </a>
-                            </li>
-                            <li>
-                                <a onClick={() => setShowModal(true)} className="text-base">
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                        <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
-                                    </svg>
-                                    Nuovo Torneo
-                                </a>
-                            </li>
-                        </ul>
-                    </div>
-
-                    {/* Desktop Buttons */}
-                    <div className="hidden md:flex gap-3">
-                        <button
-                            onClick={() => setShowJoinModal(true)}
-                            className="btn btn-secondary"
-                        >
-                            Entra in un Torneo
-                        </button>
-                        <button
-                            onClick={() => setShowModal(true)}
-                            className="btn btn-primary"
-                        >
-                            + Nuovo Torneo
-                        </button>
-                    </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {tournaments.map((t) => (
-                        <Link key={t._id} href={`/tournaments/${t._id}`}>
-                            <div className="card bg-base-100 shadow-xl hover:shadow-2xl transition cursor-pointer">
-                                <div className="card-body">
-                                    <h2 className="card-title">
-                                        {t.name}
-                                        <div className={`badge ${t.status === 'active' ? 'badge-success' : 'badge-ghost'}`}>
-                                            {t.status === 'active' ? 'ATTIVO' : 'COMPLETATO'}
-                                        </div>
-                                    </h2>
-                                    <p>{t.sport} - Stagione {t.season}</p>
-                                </div>
-                            </div>
-                        </Link>
-                    ))}
-                </div>
-
-                {/* Join Tournament Modal */}
-                {showJoinModal && (
-                    <div className="modal modal-open">
-                        <div className="modal-box">
-                            <h3 className="font-bold text-lg mb-4">Entra in un Torneo</h3>
-                            <form onSubmit={handleJoin} className="space-y-4">
-                                <div className="form-control">
-                                    <label className="label">
-                                        <span className="label-text">Codice di Accesso</span>
-                                    </label>
-                                    <input
-                                        type="text"
-                                        required
-                                        maxLength={6}
-                                        value={joinCode}
-                                        onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-                                        className="input input-bordered w-full text-center text-2xl font-bold tracking-widest"
-                                        placeholder="ABC123"
-                                    />
-                                </div>
-                                <div className="form-control">
-                                    <label className="label">
-                                        <span className="label-text">Nome Giocatore</span>
-                                    </label>
-                                    <input
-                                        type="text"
-                                        required
-                                        value={playerName}
-                                        onChange={(e) => setPlayerName(e.target.value)}
-                                        className="input input-bordered w-full"
-                                        placeholder="Il tuo nome"
-                                    />
-                                </div>
-                                <div className="form-control">
-                                    <label className="label">
-                                        <span className="label-text">Posizione</span>
-                                    </label>
-                                    <select
-                                        value={position}
-                                        onChange={(e) => setPosition(e.target.value)}
-                                        className="select select-bordered w-full"
-                                        required
-                                    >
-                                        <option value="Portiere">Portiere</option>
-                                        <option value="Difensore">Difensore</option>
-                                        <option value="Centrocampista">Centrocampista</option>
-                                        <option value="Attaccante">Attaccante</option>
-                                    </select>
-                                </div>
-                                <div className="form-control">
-                                    <label className="label">
-                                        <span className="label-text">Rating ({rating})</span>
-                                    </label>
-                                    <input
-                                        type="range"
-                                        min="0"
-                                        max="100"
-                                        value={rating}
-                                        onChange={(e) => setRating(parseInt(e.target.value))}
-                                        className="range range-primary"
-                                    />
-                                    <div className="w-full flex justify-between text-xs px-2 mt-1">
-                                        <span>0</span>
-                                        <span>50</span>
-                                        <span>100</span>
-                                    </div>
-                                </div>
-                                <div className="modal-action">
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            setShowJoinModal(false);
-                                            setJoinCode("");
-                                            setPlayerName("");
-                                            setPosition("Centrocampista");
-                                            setRating(50);
-                                        }}
-                                        className="btn btn-ghost"
-                                        disabled={isJoining}
-                                    >
-                                        Annulla
-                                    </button>
-                                    <button
-                                        type="submit"
-                                        className="btn btn-primary"
-                                        disabled={isJoining || !joinCode || !playerName.trim()}
-                                    >
-                                        {isJoining ? "Entrando..." : "Entra"}
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-                )}
-
-                {/* Create Tournament Modal */}
-                {showModal && (
-                    <div className="modal modal-open">
-                        <div className="modal-box">
-                            <h3 className="font-bold text-lg mb-4">Crea Torneo</h3>
-                            <form onSubmit={handleCreate} className="space-y-4">
-                                <div className="form-control">
-                                    <label className="label">
-                                        <span className="label-text">Nome</span>
-                                    </label>
-                                    <input
-                                        type="text"
-                                        required
-                                        value={newTournament.name}
-                                        onChange={(e) => setNewTournament({ ...newTournament, name: e.target.value })}
-                                        className="input input-bordered w-full"
-                                    />
-                                </div>
-                                <div className="form-control">
-                                    <label className="label">
-                                        <span className="label-text">Sport</span>
-                                    </label>
-                                    <select
-                                        value={newTournament.sport}
-                                        onChange={(e) => setNewTournament({ ...newTournament, sport: e.target.value })}
-                                        className="select select-bordered w-full"
-                                    >
-                                        <option value="Calcio">Calcio</option>
-                                        <option value="Basket">Basket</option>
-                                        <option value="Volley">Volley</option>
-                                    </select>
-                                </div>
-                                <div className="form-control">
-                                    <label className="label">
-                                        <span className="label-text">Stagione</span>
-                                    </label>
-                                    <input
-                                        type="number"
-                                        required
-                                        value={newTournament.season}
-                                        onChange={(e) => setNewTournament({ ...newTournament, season: parseInt(e.target.value) })}
-                                        className="input input-bordered w-full"
-                                    />
-                                </div>
-                                <div className="modal-action">
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowModal(false)}
-                                        className="btn btn-ghost"
-                                    >
-                                        Annulla
-                                    </button>
-                                    <button
-                                        type="submit"
-                                        className="btn btn-primary"
-                                    >
-                                        Crea
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-                )}
-            </div>
+  return (
+    <div className="min-h-screen">
+      <Navbar />
+      <main id="main-content" className="page-width app-main">
+        <div className="page-intro">
+          <div>
+            <p className="eyebrow">IL TUO SPAZIO, LE VOSTRE SFIDE</p>
+            <h1>
+              {session?.user?.name
+                ? `Ciao, ${session.user.name.split(" ")[0]}. Si gioca?`
+                : "I tuoi tornei, tutti qui."}
+            </h1>
+            <p>
+              Riprendi un torneo, raggiungi gli amici o dai inizio a una nuova
+              sfida.
+            </p>
+          </div>
+          <div className="intro-actions">
+            <button
+              className="btn btn-outline"
+              onClick={() => openModal("join")}
+            >
+              <Icon name="login" size={17} />
+              Ho un codice invito
+            </button>
+            <button
+              className="btn btn-primary"
+              onClick={() => openModal("create")}
+            >
+              <Icon name="plus" size={18} />
+              Crea torneo
+            </button>
+          </div>
         </div>
-    );
+        <div className="dashboard-summary">
+          <div className="summary-item">
+            <Icon name="trophy" />
+            <strong>{loading ? "–" : tournaments.length}</strong>
+            <span>Tornei totali</span>
+          </div>
+          <div className="summary-item">
+            <span className="status-dot" />
+            <strong>{loading ? "–" : active}</strong>
+            <span>In corso</span>
+          </div>
+          <div className="summary-item">
+            <Icon name="calendar" />
+            <strong>{loading ? "–" : tournaments.length - active}</strong>
+            <span>Conclusi</span>
+          </div>
+        </div>
+        <div className="dashboard-grid">
+          <section className="panel" aria-label="I miei tornei">
+            <div className="tournament-toolbar">
+              <div
+                className="filter-group"
+                role="group"
+                aria-label="Filtra tornei"
+              >
+                {[
+                  { id: "all", label: "Tutti i tornei" },
+                  { id: "active", label: "In corso" },
+                  { id: "archived", label: "Conclusi" },
+                ].map((item) => (
+                  <button
+                    key={item.id}
+                    className={`filter-button ${filter === item.id ? "selected" : ""}`}
+                    aria-pressed={filter === item.id}
+                    onClick={() => setFilter(item.id)}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+              <div className="search-field">
+                <Icon name="search" size={16} />
+                <input
+                  type="search"
+                  aria-label="Cerca tra i tuoi tornei"
+                  placeholder="Cerca un torneo…"
+                  className="input"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                />
+              </div>
+            </div>
+            {status === "loading" || loading ? (
+              <div className="loading-row" role="status">
+                <span className="loading loading-spinner loading-sm" />
+                Caricamento dei tuoi tornei…
+              </div>
+            ) : loadError ? (
+              <div className="empty-state" role="alert">
+                <p>{loadError}</p>
+                <button className="btn btn-outline" onClick={fetchTournaments}>
+                  Riprova
+                </button>
+              </div>
+            ) : visible.length ? (
+              <div>
+                {visible.map((t) => (
+                  <Link
+                    key={t._id}
+                    href={`/tournaments/${t._id}`}
+                    className="tournament-row"
+                  >
+                    <span className="tournament-symbol">
+                      <Icon
+                        name={t.sport === "Calcio" ? "pitch" : "trophy"}
+                        size={25}
+                      />
+                    </span>
+                    <div className="tournament-row-info">
+                      <h2>{t.name}</h2>
+                      <div className="tournament-meta">
+                        <span>{t.sport}</span>
+                        <span>
+                          <Icon name="calendar" size={12} />
+                          {t.season}
+                        </span>
+                        {t.participants && (
+                          <span>
+                            <Icon name="users" size={12} />
+                            {t.participants.length} giocatori
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <span
+                      className={`badge ${t.status === "active" ? "badge-success" : "badge-ghost"}`}
+                    >
+                      {t.status === "active" ? "In corso" : "Concluso"}
+                    </span>
+                    <Icon name="chevron" size={17} className="row-chevron" />
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <div className="empty-state">
+                <span className="empty-icon">
+                  <Icon name="trophy" size={27} />
+                </span>
+                <h2>
+                  {tournaments.length
+                    ? "Nessun torneo trovato"
+                    : "La prima sfida inizia da qui."}
+                </h2>
+                <p>
+                  {tournaments.length
+                    ? "Prova un altro nome o cambia il filtro per ritrovare il tuo torneo."
+                    : "Crea il tuo torneo e invita il gruppo. Se un amico l’ha già creato, ti basta il suo codice invito."}
+                </p>
+                {tournaments.length ? (
+                  <button
+                    className="btn btn-outline"
+                    onClick={() => {
+                      setQuery("");
+                      setFilter("all");
+                    }}
+                  >
+                    Mostra tutti i tornei
+                  </button>
+                ) : (
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => openModal("create")}
+                  >
+                    <Icon name="plus" size={17} />
+                    Crea il primo torneo
+                  </button>
+                )}
+              </div>
+            )}
+          </section>
+          <aside className="dashboard-aside">
+            <div className="side-card">
+              <Icon name="pitch" size={39} />
+              <h2>Una partita al volo?</h2>
+              <p>
+                Non serve un torneo. Aggiungi i giocatori e prepara due squadre
+                equilibrate, anche all’ultimo minuto.
+              </p>
+              <Link href="/balancer" className="btn btn-outline">
+                Crea le squadre
+                <Icon name="arrow" size={17} />
+              </Link>
+            </div>
+            <div className="dashboard-tip">
+              <h3>
+                <Icon name="users" size={16} />
+                Il gruppo è già pronto?
+              </h3>
+              <p>
+                Trovi il codice invito nella pagina del torneo. Condividilo con
+                gli amici per farli partecipare.
+              </p>
+            </div>
+          </aside>
+        </div>
+        {modal && (
+          <Modal
+            title={
+              modal === "join"
+                ? "Entra nel gruppo."
+                : "La vostra prossima sfida."
+            }
+            description={
+              modal === "join"
+                ? "Inserisci il codice che ti ha inviato l’organizzatore e presenta il tuo giocatore."
+                : "Scegli un nome e lo sport. Potrai invitare gli amici appena creato il torneo."
+            }
+            onClose={() => {
+              if (!busy) setModal(null);
+            }}
+          >
+            <form
+              onSubmit={handleSubmit}
+              className="dialog-form"
+              aria-busy={busy}
+            >
+              {modal === "create" ? (
+                <>
+                  <div className="form-control">
+                    <label htmlFor="tournament-name" className="field-label">
+                      Nome del torneo
+                    </label>
+                    <input
+                      id="tournament-name"
+                      autoFocus
+                      required
+                      maxLength={100}
+                      className="input"
+                      placeholder="Es. Il calcetto del giovedì"
+                      value={newTournament.name}
+                      onChange={(e) =>
+                        setNewTournament({
+                          ...newTournament,
+                          name: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="fields-row">
+                    <div className="form-control">
+                      <label htmlFor="tournament-sport" className="field-label">
+                        Sport
+                      </label>
+                      <select
+                        id="tournament-sport"
+                        className="select"
+                        value={newTournament.sport}
+                        onChange={(e) =>
+                          setNewTournament({
+                            ...newTournament,
+                            sport: e.target.value,
+                          })
+                        }
+                      >
+                        {["Calcio", "Basket", "Volley"].map((s) => (
+                          <option key={s}>{s}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="form-control">
+                      <label
+                        htmlFor="tournament-season"
+                        className="field-label"
+                      >
+                        Anno
+                      </label>
+                      <input
+                        id="tournament-season"
+                        type="number"
+                        min="1900"
+                        max="2200"
+                        required
+                        className="input"
+                        value={newTournament.season}
+                        onChange={(e) =>
+                          setNewTournament({
+                            ...newTournament,
+                            season: Number(e.target.value),
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+                  <p className="field-hint">
+                    Sarai l’organizzatore e il primo giocatore del torneo. Ruolo
+                    e valutazione si possono modificare in seguito.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div className="form-control">
+                    <label htmlFor="join-code" className="field-label">
+                      Codice invito
+                    </label>
+                    <input
+                      id="join-code"
+                      autoFocus
+                      required
+                      minLength={6}
+                      maxLength={6}
+                      pattern="[A-Za-z0-9]{6}"
+                      className="input code-input"
+                      placeholder="ABC123"
+                      autoComplete="off"
+                      value={joinCode}
+                      onChange={(e) =>
+                        setJoinCode(e.target.value.toUpperCase())
+                      }
+                    />
+                    <p className="field-hint">
+                      Le 6 lettere e numeri condivisi dall’organizzatore.
+                    </p>
+                  </div>
+                  <div className="form-control">
+                    <label htmlFor="join-name" className="field-label">
+                      Il tuo nome in campo
+                    </label>
+                    <input
+                      id="join-name"
+                      required
+                      maxLength={100}
+                      className="input"
+                      autoComplete="name"
+                      value={playerName}
+                      onChange={(e) => setPlayerName(e.target.value)}
+                    />
+                  </div>
+                  <div className="form-control">
+                    <label htmlFor="join-role" className="field-label">
+                      Ruolo preferito
+                    </label>
+                    <select
+                      id="join-role"
+                      className="select"
+                      value={position}
+                      onChange={(e) => setPosition(e.target.value)}
+                    >
+                      {positions.map((p) => (
+                        <option key={p}>{p}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-control">
+                    <label
+                      htmlFor="join-rating"
+                      className="field-label rating-label"
+                    >
+                      Valutazione
+                      <span className="rating-value">{rating} / 100</span>
+                    </label>
+                    <input
+                      id="join-rating"
+                      type="range"
+                      min="0"
+                      max="100"
+                      className="range range-primary range-sm"
+                      value={rating}
+                      onChange={(e) => setRating(Number(e.target.value))}
+                    />
+                    <p className="field-hint">
+                      50 è un buon punto di partenza. Serve a bilanciare le
+                      squadre.
+                    </p>
+                  </div>
+                </>
+              )}
+              {formError && (
+                <p className="inline-error" role="alert">
+                  {formError}
+                </p>
+              )}
+              <div className="dialog-actions">
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  disabled={busy}
+                  onClick={() => setModal(null)}
+                >
+                  Annulla
+                </button>
+                <button
+                  className="btn btn-primary"
+                  type="submit"
+                  disabled={
+                    busy ||
+                    (modal === "create"
+                      ? !newTournament.name.trim()
+                      : !playerName.trim())
+                  }
+                >
+                  {busy ? (
+                    <>
+                      <span className="loading loading-spinner loading-xs" />
+                      Un momento…
+                    </>
+                  ) : (
+                    <>
+                      {modal === "join" ? "Entra nel torneo" : "Crea torneo"}
+                      <Icon name="arrow" size={16} />
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </Modal>
+        )}
+      </main>
+    </div>
+  );
 }
