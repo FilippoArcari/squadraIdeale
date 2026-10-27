@@ -116,6 +116,18 @@ export default function GamePage() {
     }
   };
 
+  const deleteMatch = async () => {
+    if (!confirm("Eliminare questa partita? L'azione non si può annullare."))
+      return;
+    const res = await fetch(`/api/games/${id}`, { method: "DELETE" });
+    if (res.ok) {
+      router.push(`/tournaments/${game?.turnament?._id}`);
+    } else {
+      const data = await res.json().catch(() => null);
+      alert(data?.message || "Impossibile eliminare la partita.");
+    }
+  };
+
   const finalizeMatch = async () => {
     const res = await fetch(`/api/games/${id}/finalize`, {
       method: "POST",
@@ -400,6 +412,12 @@ export default function GamePage() {
                 className="btn btn-error btn-lg shadow-lg"
               >
                 Termina Partita e Inizia Votazione
+              </button>
+              <button
+                onClick={deleteMatch}
+                className="btn btn-ghost btn-sm text-error"
+              >
+                Elimina partita
               </button>
             </div>
           ) : (

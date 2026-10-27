@@ -23,6 +23,7 @@ interface Game {
   goals: { player: string; count: number }[];
   mvp?: Player;
   manualWinner?: "teamA" | "teamB" | "draw";
+  isFinalized?: boolean;
 }
 
 interface Tournament {
@@ -326,6 +327,26 @@ export default function AdminDashboard() {
       (document.getElementById("game_modal") as HTMLDialogElement).close();
       setEditingGame(null);
       fetchTournament();
+    }
+  };
+
+  const handleDeleteGame = async (game: Game) => {
+    const finalized = game.isFinalized
+      ? "\n\nLa partita è già conclusa: gol, MVP, vittorie e punti assegnati ai giocatori verranno annullati."
+      : "";
+    if (
+      !confirm(
+        `Eliminare la partita del ${new Date(game.date).toLocaleDateString("it-IT")}? L'azione non si può annullare.${finalized}`,
+      )
+    )
+      return;
+
+    const res = await fetch(`/api/games/${game._id}`, { method: "DELETE" });
+    if (res.ok) {
+      fetchTournament();
+    } else {
+      const data = await res.json().catch(() => null);
+      alert(data?.message || "Impossibile eliminare la partita.");
     }
   };
 
@@ -709,12 +730,20 @@ export default function AdminDashboard() {
                         {game.manualWinner || "Auto"}
                       </div>
                     </div>
-                    <button
-                      onClick={() => openGameModal(game)}
-                      className="btn btn-sm btn-primary"
-                    >
-                      Modifica
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => openGameModal(game)}
+                        className="btn btn-sm btn-primary"
+                      >
+                        Modifica
+                      </button>
+                      <button
+                        onClick={() => handleDeleteGame(game)}
+                        className="btn btn-sm btn-outline btn-error"
+                      >
+                        Elimina
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>

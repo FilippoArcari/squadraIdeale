@@ -2690,3 +2690,85 @@ select {
 .builder-output {
   scroll-margin-top: 135px;
 }
+
+/* Mobile: il campo con entrambe le squadre deve stare in una sola schermata.
+   L'altezza e' legata al viewport (dvh) e le due meta' campo si dividono lo
+   spazio; righe e token si comprimono invece di andare a capo. */
+@media (max-width: 800px) {
+  .match-pitch {
+    display: flex;
+    flex-direction: column;
+    height: calc(100dvh - 4em);
+    min-height: 420px;
+    max-height: 760px;
+  }
+  .match-team-half {
+    flex: 1 1 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 10px 4px;
+  }
+  .match-team-label {
+    padding: 0 10px 2px;
+    font-size: 11px;
+  }
+  .match-formation {
+    flex: 1;
+    min-height: 0;
+    justify-content: space-around;
+    gap: 0;
+  }
+  .formation-row {
+    flex: 1 1 0;
+    min-height: 0;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 2px;
+  }
+  .match-token {
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: 56px;
+    width: auto;
+  }
+  .match-token-avatar {
+    width: 28px;
+    height: 28px;
+    font-size: 9px;
+  }
+  .match-token-rating {
+    width: 16px;
+    height: 16px;
+    right: -8px;
+    font-size: 7px;
+  }
+  .match-token-name {
+    max-width: 100%;
+    font-size: 8px;
+    margin-top: 1px;
+  }
+  /* Il tasto "cambia squadra" non occupa piu' una riga sotto il nome: sta
+     sull'avatar; l'area tappabile resta ~44px grazie al pseudo-elemento. */
+  .match-token-move {
+    position: absolute;
+    top: -6px;
+    left: -2px;
+    min-width: 18px;
+    min-height: 18px;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    background: #00000059;
+    border-radius: 50%;
+  }
+  .match-token-move::after {
+    content: "";
+    position: absolute;
+    inset: -13px;
+  }
+  .match-token-move svg {
+    width: 10px;
+    height: 10px;
+  }
+}
