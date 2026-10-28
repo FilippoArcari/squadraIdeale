@@ -2698,7 +2698,7 @@ select {
   .match-pitch {
     display: flex;
     flex-direction: column;
-    height: calc(100dvh - 4em);
+    height: calc(100dvh - 15em);
     min-height: 420px;
     max-height: 760px;
   }
